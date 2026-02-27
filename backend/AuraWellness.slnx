@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AuraWellness.API/AuraWellness.API.csproj" />
+    <Project Path="src/AuraWellness.Application/AuraWellness.Application.csproj" />
+    <Project Path="src/AuraWellness.Domain/AuraWellness.Domain.csproj" />
+    <Project Path="src/AuraWellness.Infrastructure/AuraWellness.Infrastructure.csproj" />
+  </Folder>
+</Solution>

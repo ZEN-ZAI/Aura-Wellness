@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# .NET
+**/bin/
+**/obj/
+**/bin\\Debug/
+**/obj\\Debug/
+**/*.user
+**/*.suo
+**/.vs/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+
+# Go
+chat-service/tmp/
+chat-service/*.exe
+chat-service/*.test
+chat-service/coverage.out
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3

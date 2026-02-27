@@ -1,0 +1,81 @@
+services:
+  postgres-main:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aura_wellness
+      POSTGRES_USER: aura_user
+      POSTGRES_PASSWORD: ${POSTGRES_MAIN_PASSWORD}
+    volumes:
+      - postgres_main_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aura_user -d aura_wellness"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-chat:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aura_chat
+      POSTGRES_USER: chat_user
+      POSTGRES_PASSWORD: ${POSTGRES_CHAT_PASSWORD}
+    volumes:
+      - postgres_chat_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat_user -d aura_chat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  chat-service:
+    build:
+      context: ./chat-service
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres-chat
+      DB_PORT: "5432"
+      DB_NAME: aura_chat
+      DB_USER: chat_user
+      DB_PASSWORD: ${POSTGRES_CHAT_PASSWORD}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      PORT: "8080"
+    depends_on:
+      postgres-chat:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres-main;Port=5432;Database=aura_wellness;Username=aura_user;Password=${POSTGRES_MAIN_PASSWORD}"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__ExpiryMinutes: "60"
+      Jwt__Issuer: "aura-wellness"
+      Jwt__Audience: "aura-wellness-client"
+      ChatService__BaseUrl: "http://chat-service:8080"
+      ChatService__InternalApiKey: ${INTERNAL_API_KEY}
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      chat-service:
+        condition: service_started
+    ports:
+      - "5001:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_main_data:
+  postgres_chat_data:
