@@ -1,0 +1,6 @@
+/*
+  Import only Tailwind utilities — skipping Preflight (CSS reset).
+  Ant Design's <App> wrapper provides its own CSS normalization.
+  Using @import "tailwindcss" would conflict with Ant Design's expected browser defaults.
+*/
+@import "tailwindcss/utilities";
