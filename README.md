@@ -68,7 +68,7 @@ Defined in `.env` (copy from `.env.example`):
 This creates: Company → default Business Unit ("{CompanyName} HQ") → Owner person → Owner staff profile → Chat workspace for the default BU.
 
 ### 2. Log in
-`POST /api/auth/login` with `{ "email": "alice@acme.com", "password": "Welcome@123" }`
+`POST /api/auth/login` with `{ "email": "alice@acme.com", "password": "P@ssw0rd" }`
 
 - If the email appears in exactly one BU → returns a JWT immediately.
 - If the email appears in multiple BUs → returns HTTP 409 with a list of BU choices; re-submit with `{ email, password, buId }`.
@@ -123,7 +123,7 @@ Role is embedded in the JWT and enforced via `[Authorize(Roles = "...")]` attrib
 
 ## Default Password
 
-All newly created accounts (onboarding owner + staff created by Owner) use `Welcome@123` as the initial password. This is intentional per the assessment spec and clearly documented here.
+All newly created accounts (onboarding owner + staff created by Owner) use `P@ssw0rd` as the initial password. This is intentional per the assessment spec and clearly documented here.
 
 > **Security note:** In a production system this would be replaced by an invite-link flow with forced password change on first login.
 

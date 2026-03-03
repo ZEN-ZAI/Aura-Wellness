@@ -165,7 +165,7 @@ sequenceDiagram
     participant API as .NET Backend
     participant DB as aura_wellness DB
 
-    Client->>API: POST /api/auth/login { email: "user@example.com", password: "Welcome@123" }
+    Client->>API: POST /api/auth/login { email: "user@example.com", password: "P@ssw0rd" }
     API->>DB: SELECT bu_staff_profiles WHERE email = ? (across all BUs in company)
 
     alt Exactly one profile found
@@ -215,7 +215,7 @@ sequenceDiagram
         API->>DB: 1. INSERT companies → companyId
         API->>DB: 2. INSERT business_units (name = "{CompanyName} HQ") → buId
         API->>DB: 3. INSERT persons (firstName, lastName) → personId
-        API->>API: 4. BCrypt hash "Welcome@123"
+        API->>API: 4. BCrypt hash "P@ssw0rd"
         API->>DB: 5. INSERT bu_staff_profiles (email, hash, role=Owner, buId)
         DB-->>API: COMMIT
     end
@@ -239,7 +239,7 @@ sequenceDiagram
 - Steps 1-5 run inside a single EF Core `IDbContextTransaction`. If any step fails, the entire transaction rolls back and no data is persisted.
 - Steps 6-7 execute after the transaction is committed. If either Go HTTP call fails, the .NET backend returns a 500 to the client, but the already-committed database records in `aura_wellness` are not rolled back.
 - This is an acknowledged MVP trade-off: a compensating transaction or saga pattern would be required for full distributed consistency.
-- The default password `Welcome@123` is hardcoded and used for all newly created staff accounts. Owners are expected to prompt users to change their password on first login.
+- The default password `P@ssw0rd` is set via environment variable and used for all newly created staff accounts. Owners are expected to prompt users to change their password on first login.
 
 ---
 
@@ -286,5 +286,5 @@ Base path: `/api`
 | Chat DB isolation | Separate PostgreSQL instance (`aura_chat`) | Enforces a clean service boundary; chat service owns its own data and schema migrations |
 | Onboarding transaction boundary | DB transaction for steps 1-5; Go calls after commit | Ensures core tenant data is consistent; Go failures return 500 but do not corrupt main DB state |
 | JWT storage (frontend) | `localStorage` | Simple implementation for assessment context; XSS risk is acknowledged and noted |
-| Default password | `Welcome@123` (hardcoded constant) | Explicit and easily auditable during code review; not suitable for production |
+| Default password | `P@ssw0rd` (env var `DEFAULT_STAFF_PASSWORD`) | Configurable per environment; not suitable for production |
 | Chat member provisioning on staff creation | Auto-add with `has_access = false` | Ensures all staff are represented in chat; Owner must make a deliberate action to grant access |
