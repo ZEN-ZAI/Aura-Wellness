@@ -1,0 +1,7 @@
+# Robot Framework outputs
+results/
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
