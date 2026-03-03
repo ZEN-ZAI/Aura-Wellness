@@ -60,6 +60,9 @@ Add New Staff Member Successfully
     # Role defaults to Staff — leave unchanged
     Click    ${ANT_MODAL} >> button:has-text("Add Staff")
 
+    # A "Staff Member Created" password-info modal opens after success — dismiss it first
+    Wait For Elements State    button:has-text("Got it")    visible    timeout=${NAVIGATION_TIMEOUT}
+    Click    button:has-text("Got it")
     Wait For Elements State    ${ANT_MODAL_WRAP}    hidden    timeout=${NAVIGATION_TIMEOUT}
     # Use last name (unique, not in email) to avoid matching the email cell case-insensitively
     Wait For Elements State    ${ANT_TABLE} >> text=${staff_last}    visible    timeout=${NAVIGATION_TIMEOUT}

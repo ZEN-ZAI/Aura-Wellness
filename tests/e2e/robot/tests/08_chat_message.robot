@@ -38,6 +38,9 @@ Owner Adds New Staff Member
     Fill Text    ${ANT_MODAL} >> input#email        ${STAFF_EMAIL}
     Select Ant Option By Index    ${ANT_MODAL} >> css=.ant-select-content >> nth=0    0
     Click    ${ANT_MODAL} >> button:has-text("Add Staff")
+    # A "Staff Member Created" password-info modal opens after success — dismiss it first
+    Wait For Elements State    button:has-text("Got it")    visible    timeout=${NAVIGATION_TIMEOUT}
+    Click    button:has-text("Got it")
     Wait For Elements State    ${ANT_MODAL_WRAP}    hidden    timeout=${NAVIGATION_TIMEOUT}
     Wait For Elements State    ${ANT_TABLE} >> text=${STAFF_LAST} >> nth=0    visible    timeout=${NAVIGATION_TIMEOUT}
 
@@ -67,7 +70,7 @@ Chat Page Loads For Staff Member
     [Documentation]    Staff are scoped to their own BU — no BU selector is shown; the
     ...    member sidebar header ("Members") and the message textarea are immediately visible.
     [Tags]    smoke    chat
-    Wait For Elements State    css=.ant-layout-content    visible    timeout=${NAVIGATION_TIMEOUT}
+    Wait For Elements State    css=.ant-layout-content >> nth=0    visible    timeout=${NAVIGATION_TIMEOUT}
     Wait For Elements State    text=Members    visible    timeout=${NAVIGATION_TIMEOUT}
     Wait For Elements State    ${CHAT_TEXTAREA}    visible    timeout=${NAVIGATION_TIMEOUT}
 
