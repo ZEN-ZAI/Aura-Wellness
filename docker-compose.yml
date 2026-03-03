@@ -7,6 +7,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_MAIN_PASSWORD}
     volumes:
       - postgres_main_data:/var/lib/postgresql/data
+    ports:
+      - "15432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aura_user -d aura_wellness"]
       interval: 5s
@@ -21,10 +23,22 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_CHAT_PASSWORD}
     volumes:
       - postgres_chat_data:/var/lib/postgresql/data
+    ports:
+      - "15433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chat_user -d aura_chat"]
       interval: 5s
       timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 10
 
   chat-service:
@@ -38,12 +52,15 @@ services:
       DB_USER: chat_user
       DB_PASSWORD: ${POSTGRES_CHAT_PASSWORD}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      PORT: "8080"
+      PORT: "50051"
+      REDIS_ADDR: "redis:6379"
     depends_on:
       postgres-chat:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
-      - "8081:8080"
+      - "50051:50051"
 
   backend:
     build:
@@ -55,8 +72,9 @@ services:
       Jwt__ExpiryMinutes: "60"
       Jwt__Issuer: "aura-wellness"
       Jwt__Audience: "aura-wellness-client"
-      ChatService__BaseUrl: "http://chat-service:8080"
+      ChatService__GrpcUrl: "http://chat-service:50051"
       ChatService__InternalApiKey: ${INTERNAL_API_KEY}
+      DefaultStaffPassword: ${DEFAULT_STAFF_PASSWORD}
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: "8080"
     depends_on:
@@ -64,6 +82,8 @@ services:
         condition: service_healthy
       chat-service:
         condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "5001:8080"
 
@@ -71,8 +91,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    environment:
+      BACKEND_URL: http://backend:8080
+      DEFAULT_STAFF_PASSWORD: ${DEFAULT_STAFF_PASSWORD}
+      NODE_ENV: production
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
       - backend
 
