@@ -23,20 +23,36 @@ logs/
 **/*.user
 **/*.suo
 **/.vs/
+**/TestResults/
 
 # Frontend
 frontend/node_modules/
+frontend/.next/
+frontend/out/
 frontend/dist/
 frontend/dist-ssr/
 frontend/.vite/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+frontend/.vercel
 
 # Go
 chat-service/tmp/
 chat-service/*.exe
 chat-service/*.test
 chat-service/coverage.out
+chat-service/vendor/
 
 # Databases
 *.db
 *.sqlite
 *.sqlite3
+
+# Certificates & secrets
+*.pem
+*.pfx
+*.p12
+
+# Docker
+.docker/

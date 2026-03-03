@@ -26,7 +26,9 @@ Login As
     [Arguments]    ${email}    ${password}
     Go To    ${BASE_URL}/login
     Wait For Elements State    input#email    visible
+    Clear Text    input#email
     Fill Text    input#email    ${email}
+    Clear Text    input#password
     Fill Text    input#password    ${password}
     Click    button:has-text("Sign In")
     # If the owner belongs to multiple BUs, the form shows a BU picker — submit once more

@@ -77,14 +77,14 @@ export default function LoginPage() {
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
-          initialValues={{ email: 'e2e-owner@aura-test.com', password: 'E2eTest@123' }}
+          initialValues={{ email: '', password: '' }}
         >
           <Form.Item
             label="Email Address"
             name="email"
             rules={[{ required: false, type: 'email'}]}
           >
-            <Input disabled={!!buChoices} autoComplete="email" />
+            <Input disabled={!!buChoices} autoComplete="off" />
           </Form.Item>
 
           <Form.Item
@@ -92,7 +92,7 @@ export default function LoginPage() {
             name="password"
             rules={[{ required: true, message: 'Password required' }]}
           >
-            <Input.Password autoComplete="current-password" />
+            <Input.Password autoComplete="off" />
           </Form.Item>
 
           {buChoices && (
