@@ -4,49 +4,54 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 
-	"github.com/aura-wellness/chat-service/internal/config"
-	"github.com/aura-wellness/chat-service/internal/handlers"
-	"github.com/aura-wellness/chat-service/internal/middleware"
-	"github.com/aura-wellness/chat-service/internal/repository"
-	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
+
+	"github.com/aura-wellness/chat-service/internal/application"
+	"github.com/aura-wellness/chat-service/internal/config"
+	infraPostgres "github.com/aura-wellness/chat-service/internal/infrastructure/postgres"
+	infraRedis "github.com/aura-wellness/chat-service/internal/infrastructure/redis"
+	transportGrpc "github.com/aura-wellness/chat-service/internal/transport/grpc"
 )
 
 func main() {
 	cfg := config.Load()
 
-	// Run database migrations
 	if err := runMigrations(cfg); err != nil {
 		log.Fatalf("Migration failed: %v", err)
 	}
 
-	// Connect to DB with pgx pool for application use
-	pool, err := repository.NewPool(cfg)
+	// Infrastructure layer — concrete adapters wired up first
+	pool, err := infraPostgres.NewPool(cfg)
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
 	defer pool.Close()
 
-	// Wire up repositories and handlers
-	workspaceRepo := repository.NewWorkspaceRepo(pool)
-	memberRepo := repository.NewMemberRepo(pool)
-	workspaceHandler := handlers.NewWorkspaceHandler(workspaceRepo, memberRepo)
+	pubsub := infraRedis.NewPubSub(cfg.RedisAddr)
 
-	// Set up Gin router
-	r := gin.Default()
-	r.Use(middleware.APIKeyAuth(cfg.InternalAPIKey))
+	workspaceRepo := infraPostgres.NewWorkspaceRepo(pool)
+	memberRepo := infraPostgres.NewMemberRepo(pool)
+	messageRepo := infraPostgres.NewMessageRepo(pool)
 
-	api := r.Group("/api")
-	workspaceHandler.RegisterRoutes(api)
+	// Application layer — services depend only on port interfaces
+	workspaceSvc := application.NewWorkspaceService(workspaceRepo, memberRepo)
+	messagingSvc := application.NewMessagingService(messageRepo, memberRepo, pubsub)
 
-	addr := ":" + cfg.Port
-	log.Printf("Chat service starting on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	// Transport layer — gRPC server with interceptors + handlers
+	srv := transportGrpc.NewServer(workspaceSvc, messagingSvc, cfg.InternalAPIKey)
+
+	lis, err := net.Listen("tcp", ":"+cfg.Port)
+	if err != nil {
+		log.Fatalf("Failed to listen on :%s: %v", cfg.Port, err)
+	}
+	log.Printf("gRPC chat service listening on :%s", cfg.Port)
+	if err := srv.Serve(lis); err != nil {
+		log.Fatalf("gRPC serve error: %v", err)
 	}
 }
 
@@ -67,7 +72,10 @@ func runMigrations(cfg *config.Config) error {
 		return fmt.Errorf("migration driver: %w", err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance("file://./internal/migrations", "postgres", driver)
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://./internal/infrastructure/postgres/migrations",
+		"postgres", driver,
+	)
 	if err != nil {
 		return fmt.Errorf("migrate instance: %w", err)
 	}

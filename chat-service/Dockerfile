@@ -9,6 +9,6 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /app/chat-service .
-COPY --from=builder /app/internal/migrations ./internal/migrations
+COPY --from=builder /app/internal/infrastructure/postgres/migrations ./internal/infrastructure/postgres/migrations
 EXPOSE 8080
 ENTRYPOINT ["./chat-service"]
