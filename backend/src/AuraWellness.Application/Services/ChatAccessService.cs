@@ -1,13 +1,9 @@
 using AuraWellness.Application.DTOs;
+using AuraWellness.Application.Interfaces.External;
+using AuraWellness.Application.Interfaces.Services;
 using AuraWellness.Domain.Interfaces;
 
 namespace AuraWellness.Application.Services;
-
-public interface IChatAccessService
-{
-    Task<ChatWorkspaceResponse?> GetWorkspaceAsync(Guid buId, Guid companyId, CancellationToken ct = default);
-    Task UpdateAccessAsync(Guid buId, Guid personId, bool hasAccess, Guid companyId, CancellationToken ct = default);
-}
 
 public class ChatAccessService(
     IChatServiceClient chatClient,
@@ -51,5 +47,39 @@ public class ChatAccessService(
             ?? throw new InvalidOperationException("Chat workspace not found.");
 
         await chatClient.UpdateMemberAccessAsync(workspace.Id, personId, hasAccess, ct);
+    }
+
+    public async Task<GetMessagesResponse?> GetMessagesAsync(Guid buId, Guid personId, Guid companyId, int limit = 50, DateTime? before = null, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
+        // Verify caller has access
+        var members = await chatClient.GetWorkspaceMembersAsync(workspace.Id, ct);
+        var member = members.FirstOrDefault(m => m.PersonId == personId);
+        if (member is null || !member.HasAccess)
+            throw new UnauthorizedAccessException("You do not have chat access for this workspace.");
+
+        var serviceMessages = await chatClient.GetMessagesAsync(workspace.Id, limit, before, ct);
+        var messages = serviceMessages
+            .Select(m => new ChatMessageDto(m.Id, m.PersonId, m.SenderName, m.Content, m.CreatedAt))
+            .ToList();
+
+        return new GetMessagesResponse(messages);
+    }
+
+    public async Task<ChatMessageDto?> SendMessageAsync(Guid buId, Guid personId, string senderName, string content, Guid companyId, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
+        // Verify caller has access (chat service also enforces this, but we check early)
+        var members = await chatClient.GetWorkspaceMembersAsync(workspace.Id, ct);
+        var member = members.FirstOrDefault(m => m.PersonId == personId);
+        if (member is null || !member.HasAccess)
+            throw new UnauthorizedAccessException("You do not have chat access for this workspace.");
+
+        var result = await chatClient.SendMessageAsync(workspace.Id, personId, senderName, content, ct);
+        return new ChatMessageDto(result.Id, result.PersonId, result.SenderName, result.Content, result.CreatedAt);
     }
 }

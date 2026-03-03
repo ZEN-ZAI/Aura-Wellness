@@ -1,5 +1,5 @@
 using AuraWellness.Application.DTOs;
-using AuraWellness.Application.Services;
+using AuraWellness.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuraWellness.API.Controllers;

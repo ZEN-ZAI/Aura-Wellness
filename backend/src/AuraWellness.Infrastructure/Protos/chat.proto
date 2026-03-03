@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package chat.v1;
+
+option go_package = "github.com/aura-wellness/chat-service/internal/pb;pb";
+option csharp_namespace = "AuraWellness.ChatService.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// ─── Shared message types ─────────────────────────────────────────────────────
+
+message Workspace {
+  string id         = 1;
+  string bu_id      = 2;
+  string company_id = 3;
+  string name       = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message WorkspaceMember {
+  string id           = 1;
+  string workspace_id = 2;
+  string person_id    = 3;
+  string role         = 4;
+  bool   has_access   = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message ChatMessage {
+  string id           = 1;
+  string workspace_id = 2;
+  string person_id    = 3;
+  string sender_name  = 4;
+  string content      = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// ─── Workspace RPC request/response ──────────────────────────────────────────
+
+message CreateWorkspaceRequest {
+  string bu_id      = 1;
+  string company_id = 2;
+  string name       = 3;
+}
+
+message GetWorkspaceByBuIdRequest { string bu_id = 1; }
+message GetWorkspaceByIdRequest   { string id    = 1; }
+
+message AddMemberRequest {
+  string workspace_id = 1;
+  string person_id    = 2;
+  string role         = 3;
+}
+
+message UpdateMemberAccessRequest {
+  string workspace_id = 1;
+  string person_id    = 2;
+  bool   has_access   = 3;
+}
+
+message ListMembersRequest  { string workspace_id = 1; }
+message ListMembersResponse { repeated WorkspaceMember members = 1; }
+
+// ─── Message RPC request/response ────────────────────────────────────────────
+
+message SendMessageRequest {
+  string workspace_id = 1;
+  string person_id    = 2;
+  string sender_name  = 3;
+  string content      = 4;
+}
+
+message ListMessagesRequest {
+  string workspace_id = 1;
+  int32  limit        = 2;
+  google.protobuf.Timestamp before = 3;
+}
+
+message ListMessagesResponse { repeated ChatMessage messages = 1; }
+
+message StreamMessagesRequest { string workspace_id = 1; }
+
+// ─── Service definition ───────────────────────────────────────────────────────
+
+service ChatService {
+  // Workspace management
+  rpc CreateWorkspace    (CreateWorkspaceRequest)    returns (Workspace);
+  rpc GetWorkspaceByBuId (GetWorkspaceByBuIdRequest) returns (Workspace);
+  rpc GetWorkspaceById   (GetWorkspaceByIdRequest)   returns (Workspace);
+  rpc AddMember          (AddMemberRequest)          returns (WorkspaceMember);
+  rpc UpdateMemberAccess (UpdateMemberAccessRequest) returns (WorkspaceMember);
+  rpc ListMembers        (ListMembersRequest)        returns (ListMembersResponse);
+
+  // Messaging
+  rpc SendMessage  (SendMessageRequest)  returns (ChatMessage);
+  rpc ListMessages (ListMessagesRequest) returns (ListMessagesResponse);
+
+  // Server-side streaming — caller receives new messages in real time via Redis Pub/Sub
+  rpc StreamMessages (StreamMessagesRequest) returns (stream ChatMessage);
+}

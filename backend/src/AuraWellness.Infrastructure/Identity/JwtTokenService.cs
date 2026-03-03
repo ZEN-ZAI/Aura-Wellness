@@ -24,6 +24,8 @@ public class JwtTokenService(IConfiguration config) : IJwtTokenService
             new Claim("personId", profile.PersonId.ToString()),
             new Claim("buId", profile.BuId.ToString()),
             new Claim("role", profile.Role.ToString()),
+            new Claim("firstName", profile.Person.FirstName),
+            new Claim("lastName", profile.Person.LastName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

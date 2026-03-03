@@ -16,3 +16,15 @@ public record ChatMemberResponse(
 );
 
 public record UpdateChatAccessRequest(bool HasAccess);
+
+public record ChatMessageDto(
+    Guid MessageId,
+    Guid PersonId,
+    string SenderName,
+    string Content,
+    DateTime CreatedAt
+);
+
+public record GetMessagesResponse(List<ChatMessageDto> Messages);
+
+public record SendChatMessageRequest(string Content);

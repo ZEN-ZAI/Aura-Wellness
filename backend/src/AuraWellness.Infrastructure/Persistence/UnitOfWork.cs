@@ -7,6 +7,10 @@ public class UnitOfWork(AppDbContext db) : IUnitOfWork
 {
     public async Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation, CancellationToken ct = default)
     {
+        // InMemory databases (used in integration tests) do not support transactions.
+        if (!db.Database.IsRelational())
+            return await operation();
+
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {

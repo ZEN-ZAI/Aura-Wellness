@@ -2,16 +2,16 @@ namespace AuraWellness.Application.DTOs;
 
 public record OnboardRequest(
     string CompanyName,
-    string Address,
-    string ContactNumber,
     string OwnerFirstName,
-    string OwnerLastName,
-    string OwnerEmail
+    string OwnerEmail,
+    string OwnerPassword,
+    string? Address,
+    string? ContactNumber,
+    string? OwnerLastName
 );
 
 public record OnboardResponse(
     Guid CompanyId,
     Guid DefaultBuId,
-    Guid OwnerPersonId,
-    string DefaultPassword
+    Guid OwnerPersonId
 );

@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using AuraWellness.Application.DTOs;
-using AuraWellness.Application.Services;
+using AuraWellness.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

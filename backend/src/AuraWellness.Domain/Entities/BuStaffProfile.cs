@@ -32,4 +32,9 @@ public class BuStaffProfile
     {
         Role = newRole;
     }
+
+    public void UpdatePassword(string newPasswordHash)
+    {
+        PasswordHash = newPasswordHash;
+    }
 }

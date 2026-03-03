@@ -8,7 +8,14 @@ public record CreateStaffRequest(
     string Role
 );
 
-public record UpdateRoleRequest(string Role);
+public record EnrollExistingStaffRequest(
+    Guid PersonId,
+    Guid BuId,
+    string Email,
+    string Role
+);
+
+public record UpdateRoleRequest(string Role, Guid BuId);
 
 public record StaffResponse(
     Guid PersonId,
@@ -21,3 +28,5 @@ public record StaffResponse(
     string Role,
     DateTime CreatedAt
 );
+
+public record PersonOption(Guid PersonId, string FirstName, string LastName);
