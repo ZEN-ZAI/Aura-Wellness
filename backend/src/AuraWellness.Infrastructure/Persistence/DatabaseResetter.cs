@@ -1,10 +1,12 @@
 using AuraWellness.Application.Interfaces.External;
 using AuraWellness.Infrastructure.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 namespace AuraWellness.Infrastructure.Persistence;
 
-public class DatabaseResetter(AppDbContext db) : IDatabaseResetter
+public class DatabaseResetter(AppDbContext db, IConfiguration configuration) : IDatabaseResetter
 {
     private static readonly DateTime SeedDate =
         new(2026, 2, 27, 20, 17, 13, DateTimeKind.Utc);
@@ -46,5 +48,15 @@ public class DatabaseResetter(AppDbContext db) : IDatabaseResetter
             """,
             InitialDataSeed.ProfileId, InitialDataSeed.PersonId, InitialDataSeed.BuId,
             "Welcome@example.com", DemoPasswordHash, "Owner", SeedDate);
+
+        // Also clear chat message history from the chat service DB
+        var chatConnStr = configuration.GetConnectionString("ChatConnection");
+        if (!string.IsNullOrEmpty(chatConnStr))
+        {
+            await using var conn = new NpgsqlConnection(chatConnStr);
+            await conn.OpenAsync(ct);
+            await using var cmd = new NpgsqlCommand("DELETE FROM chat_messages", conn);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
     }
 }

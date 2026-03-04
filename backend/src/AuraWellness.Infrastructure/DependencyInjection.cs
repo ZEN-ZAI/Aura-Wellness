@@ -4,11 +4,13 @@ using AuraWellness.Infrastructure.Grpc;
 using AuraWellness.Infrastructure.Identity;
 using AuraWellness.Infrastructure.Persistence;
 using AuraWellness.Infrastructure.Persistence.Repositories;
+using AuraWellness.Infrastructure.Redis;
 using Grpc.Net.Client;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 using Proto = AuraWellness.ChatService.V1;
 
 namespace AuraWellness.Infrastructure;
@@ -20,6 +22,18 @@ public static class DependencyInjection
         // Database
         services.AddDbContext<AppDbContext>(opts =>
             opts.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+
+        // Redis
+        var redisConn = configuration.GetConnectionString("Redis")
+            ?? configuration["Redis:ConnectionString"]
+            ?? "localhost:6379";
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        {
+            var opts = ConfigurationOptions.Parse(redisConn);
+            opts.AllowAdmin = true;
+            return ConnectionMultiplexer.Connect(opts);
+        });
+        services.AddScoped<IRedisResetter, RedisResetter>();
 
         // Repositories
         services.AddScoped<IDatabaseResetter, DatabaseResetter>();

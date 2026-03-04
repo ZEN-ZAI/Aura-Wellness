@@ -15,4 +15,11 @@ public class AdminController(IAdminService adminService) : ControllerBase
         await adminService.ResetDatabaseAsync(ct);
         return NoContent();
     }
+
+    [HttpPost("reset-redis")]
+    public async Task<IActionResult> ResetRedis(CancellationToken ct)
+    {
+        await adminService.ResetRedisAsync(ct);
+        return NoContent();
+    }
 }
