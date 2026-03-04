@@ -22,7 +22,11 @@ const port = parseInt(process.env.PORT ?? '3000', 10);
 
 // In Docker the backend is reachable at http://backend:8080; locally at http://localhost:5239
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:5239';
-const BACKEND_WS  = BACKEND_URL.replace(/^http/, 'ws');
+
+// In Docker the Go chat service WebSocket endpoint is at http://chat-service:8080;
+// locally at http://localhost:8080 (start the chat service with WS_PORT=8080)
+const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL ?? 'http://localhost:8080';
+const CHAT_WS  = CHAT_SERVICE_URL.replace(/^http/, 'ws');
 
 const WS_PATH_RE = /^\/api\/chat\/ws\/([0-9a-f-]{36})$/i;
 
@@ -59,7 +63,7 @@ app.prepare().then(() => {
     }
 
     wss.handleUpgrade(req, socket, head, (browserWs) => {
-      const backendUrl = `${BACKEND_WS}/api/chat/workspace/${buId}/ws`;
+      const backendUrl = `${CHAT_WS}/ws/${buId}`;
 
       const backendWs = new WebSocket(backendUrl, {
         headers: { Authorization: `Bearer ${token}` },

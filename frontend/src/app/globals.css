@@ -4,3 +4,40 @@
   Using @import "tailwindcss" would conflict with Ant Design's expected browser defaults.
 */
 @import "tailwindcss/utilities";
+
+/* ── Luxury Cosmetic Clinic Design Tokens ─────────────────────────── */
+:root {
+  --color-primary:      #A87E50;   /* warm bronze gold  */
+  --color-gold:         #C9A96E;   /* champagne gold    */
+  --color-gold-light:   #EDD9AC;   /* pale champagne    */
+  --color-surface:      #FFFFFF;
+  --color-bg:           #F8F5F0;   /* warm cream        */
+  --color-bg-alt:       #F0EBE3;
+  --color-text:         #2D2D2D;
+  --color-text-muted:   #7A7068;
+  --color-sidebar:      #1A1C1E;   /* deep charcoal     */
+  --color-border:       #E8E0D5;
+  --font-display: 'Playfair Display', 'Georgia', serif;
+  --font-body:    'DM Sans', 'Inter', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Ant Design overrides for luxury feel */
+.ant-layout {
+  background: var(--color-bg) !important;
+}
+.ant-layout-content {
+  background: var(--color-bg) !important;
+}
