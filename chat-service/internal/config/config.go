@@ -10,7 +10,9 @@ type Config struct {
 	DBPassword     string
 	InternalAPIKey string
 	Port           string
+	WsPort         string
 	RedisAddr      string
+	JWTSecret      string
 }
 
 func Load() *Config {
@@ -22,7 +24,9 @@ func Load() *Config {
 		DBPassword:     getEnv("DB_PASSWORD", "changeme_chat"),
 		InternalAPIKey: getEnv("INTERNAL_API_KEY", "dev_internal_key"),
 		Port:           getEnv("PORT", "50051"),
+		WsPort:         getEnv("WS_PORT", "8080"),
 		RedisAddr:      getEnv("REDIS_ADDR", "localhost:6379"),
+		JWTSecret:      getEnv("JWT_SECRET", ""),
 	}
 }
 

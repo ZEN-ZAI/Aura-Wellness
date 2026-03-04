@@ -16,6 +16,7 @@ import (
 	infraPostgres "github.com/aura-wellness/chat-service/internal/infrastructure/postgres"
 	infraRedis "github.com/aura-wellness/chat-service/internal/infrastructure/redis"
 	transportGrpc "github.com/aura-wellness/chat-service/internal/transport/grpc"
+	transportWs "github.com/aura-wellness/chat-service/internal/transport/ws"
 )
 
 func main() {
@@ -44,6 +45,15 @@ func main() {
 
 	// Transport layer — gRPC server with interceptors + handlers
 	srv := transportGrpc.NewServer(workspaceSvc, messagingSvc, cfg.InternalAPIKey)
+
+	// WebSocket HTTP server — used by the Next.js proxy for browser clients
+	wsSrv := transportWs.NewServer(workspaceSvc, messagingSvc, cfg.JWTSecret, ":"+cfg.WsPort)
+	go func() {
+		log.Printf("WebSocket chat service listening on :%s", cfg.WsPort)
+		if err := wsSrv.ListenAndServe(); err != nil {
+			log.Fatalf("WebSocket serve error: %v", err)
+		}
+	}()
 
 	lis, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
