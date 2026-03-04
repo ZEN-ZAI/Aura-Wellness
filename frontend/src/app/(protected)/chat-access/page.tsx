@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Select, Table, Tag, Button, Typography, Alert, Card } from 'antd';
+import { Select, Table, Tag, Button, Typography, Alert, Card, Space } from 'antd';
 import { useChatStore } from '@/application/stores/chatStore';
 import { useBusinessUnitStore } from '@/application/stores/businessUnitStore';
 import { useAuthStore } from '@/application/stores/authStore';
@@ -94,17 +94,19 @@ export default function ChatAccessPage() {
       </Text>
 
       <div className="mb-6">
-        <Text strong className="block mb-2">
-          Select Business Unit
-        </Text>
-        <Select
-          value={selectedBuId || undefined}
-          onChange={setSelectedBuId}
-          placeholder="Choose a Business Unit..."
-          loading={buStore.isLoading}
-          style={{ minWidth: 256 }}
-          options={buStore.businessUnits.map((b) => ({ label: b.name, value: b.id }))}
-        />
+        <Space>
+          <Text strong className="block mb-2">
+            Select Business Unit
+          </Text>
+          <Select
+            value={selectedBuId || undefined}
+            onChange={setSelectedBuId}
+            placeholder="Choose a Business Unit..."
+            loading={buStore.isLoading}
+            style={{ minWidth: 256 }}
+            options={buStore.businessUnits.map((b) => ({ label: b.name, value: b.id }))}
+            />
+          </Space>
       </div>
 
       {selectedBuId && (

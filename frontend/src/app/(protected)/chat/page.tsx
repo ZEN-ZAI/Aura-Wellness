@@ -15,7 +15,7 @@ const { Title } = Typography;
 
 export default function ChatPage() {
   const user = useAuthStore((s) => s.user);
-  const { workspaces, messages, isLoading, fetchWorkspace, fetchMessages } = useChatStore();
+  const { workspaces, messages, isLoading, fetchWorkspace, fetchMessages, appendMessage } = useChatStore();
 
   const [accessDenied, setAccessDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -68,11 +68,14 @@ export default function ChatPage() {
       sendMessage(content);
       setDraft('');
     } else {
-      // WebSocket not yet open — fall back to REST send
+      // WebSocket not yet open — fall back to REST send and append the returned message directly.
       setSending(true);
       import('@/lib/container')
         .then(({ container }) => container.chat.sendMessage.execute(buId, content))
-        .then(() => setDraft(''))
+        .then((msg) => {
+          setDraft('');
+          appendMessage(buId, msg);
+        })
         .catch(() => setSendError('Failed to send message. Please try again.'))
         .finally(() => setSending(false));
     }

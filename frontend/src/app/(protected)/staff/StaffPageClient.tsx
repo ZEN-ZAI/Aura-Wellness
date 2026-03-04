@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Modal, Space, Typography, Alert } from 'antd';
 import { PlusOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useStaff } from '@/presentation/hooks/useStaff';
@@ -33,17 +33,13 @@ export default function StaffPageClient({
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [passwordModalName, setPasswordModalName] = useState<string | null>(null);
-  const hydrated = useRef(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setReady(true);
-  }, []);
-
-  if (!hydrated.current) {
     store.hydrate(initialStaff, initialBus);
-    hydrated.current = true;
-  }
+    setReady(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleCreate(values: CreateStaffInput) {
     setCreateError('');
@@ -116,7 +112,7 @@ export default function StaffPageClient({
       </div>
 
       <StaffTable
-        staff={store.staff}
+        staff={ready ? store.staff : initialStaff}
         isLoading={store.isLoading}
         isOwner={isOwner}
         isUpdatingRole={isUpdatingRole}
@@ -125,7 +121,7 @@ export default function StaffPageClient({
 
       <StaffForm
         open={showCreateModal}
-        businessUnits={store.businessUnits}
+        businessUnits={ready ? store.businessUnits : initialBus}
         isCreating={isCreating}
         error={createError}
         onSubmit={handleCreate}
@@ -137,7 +133,7 @@ export default function StaffPageClient({
 
       <EnrollExistingForm
         open={showEnrollModal}
-        businessUnits={store.businessUnits}
+        businessUnits={ready ? store.businessUnits : initialBus}
         persons={store.persons}
         isSubmitting={isEnrolling}
         error={enrollError}
