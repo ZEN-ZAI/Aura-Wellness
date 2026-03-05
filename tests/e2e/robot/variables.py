@@ -15,5 +15,8 @@ E2E_OWNER_EMAIL = "Welcome@example.com"
 E2E_OWNER_PASSWORD = "P@ssw0rd"
 E2E_COMPANY_NAME = "Aura Wellness Demo"
 
+# Default password assigned to newly created staff members
+STAFF_DEFAULT_PASSWORD = "P@ssw0rd"
+
 # Unique suffix to avoid conflicts when tests create new resources
 TIMESTAMP = datetime.now().strftime("%Y%m%d%H%M%S")

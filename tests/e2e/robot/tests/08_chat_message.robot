@@ -18,7 +18,6 @@ Suite Teardown      Close Browser Session
 ${STAFF_FIRST}               ChatStaff
 ${STAFF_LAST}                Chat${TIMESTAMP}
 ${STAFF_EMAIL}               chat-staff-${TIMESTAMP}@test.com
-${STAFF_DEFAULT_PASSWORD}    P@ssw0rd
 ${CHAT_TEXTAREA}             css=textarea[placeholder*="Type a message"]
 ${SEND_BUTTON}               css=.ant-btn-primary
 

@@ -18,27 +18,30 @@ Register New Company Successfully
     Wait For Elements State    input#companyName    visible
 
     Fill Text    input#companyName             Robot Test Co ${TIMESTAMP}
+    Fill Text    input#address                 123 Test Street
+    Fill Text    input#contactNumber           555-0199
     Fill Text    input#ownerFirstName          Robot
+    Fill Text    input#ownerLastName           Tester
     Fill Text    input#ownerEmail              robot-${TIMESTAMP}@test.com
     Fill Text    input#ownerPassword           Test@12345
     Fill Text    input#ownerConfirmPassword    Test@12345
 
-    Click    button:has-text("Register Company")
+    Click    button:has-text("Register Clinic")
 
     Wait For Elements State    ${ANT_RESULT_SUCCESS}    visible    timeout=${NAVIGATION_TIMEOUT}
-    # The result card title says "Company Registered!" — check the key phrase
-    Get Text    ${ANT_RESULT_SUCCESS}    contains    Company Registered
+    # The result card title says "Clinic Registered!" — check the key phrase
+    Get Text    ${ANT_RESULT_SUCCESS}    contains    Clinic Registered
 
-    Click    text=Go to Login
+    Click    text=Go to Sign In
     Wait For URL    /login
 
 Onboard With Empty Form Shows Validation Errors
     [Documentation]    Submitting an empty form should display required-field errors for all fields.
     [Tags]    onboarding    validation
     Go To    ${BASE_URL}/onboard
-    Wait For Elements State    button:has-text("Register Company")    visible
+    Wait For Elements State    button:has-text("Register Clinic")    visible
 
-    Click    button:has-text("Register Company")
+    Click    button:has-text("Register Clinic")
 
     # Use nth=0 to avoid strict-mode error when multiple error elements appear
     Wait For Elements State    ${ANT_FORM_ERROR} >> nth=0    visible
@@ -52,11 +55,14 @@ Onboard With Mismatched Passwords Shows Error
     Wait For Elements State    input#companyName    visible
 
     Fill Text    input#companyName             Mismatch Co ${TIMESTAMP}
+    Fill Text    input#address                 456 Mismatch Rd
+    Fill Text    input#contactNumber           555-0200
     Fill Text    input#ownerFirstName          Test
+    Fill Text    input#ownerLastName           Mismatch
     Fill Text    input#ownerEmail              mismatch-${TIMESTAMP}@test.com
     Fill Text    input#ownerPassword           Password@1
     Fill Text    input#ownerConfirmPassword    DifferentPassword@2
 
-    Click    button:has-text("Register Company")
+    Click    button:has-text("Register Clinic")
 
     Wait For Elements State    ${ANT_FORM_ERROR} >> nth=0    visible
