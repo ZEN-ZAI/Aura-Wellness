@@ -3,6 +3,7 @@ import { businessUnitApi } from '@/infrastructure/api/businessUnitApi';
 import { authApi } from '@/infrastructure/api/authApi';
 import { chatApi } from '@/infrastructure/api/chatApi';
 import { chatMessageApi } from '@/infrastructure/api/chatMessageApi';
+import { chatConversationApi } from '@/infrastructure/api/chatConversationApi';
 
 import { GetStaffUseCase } from '@/application/use-cases/staff/GetStaffUseCase';
 import { GetPersonsUseCase } from '@/application/use-cases/staff/GetPersonsUseCase';
@@ -16,6 +17,10 @@ import { GetChatWorkspaceUseCase } from '@/application/use-cases/chat/GetChatWor
 import { UpdateChatAccessUseCase } from '@/application/use-cases/chat/UpdateChatAccessUseCase';
 import { GetMessagesUseCase } from '@/application/use-cases/chat/GetMessagesUseCase';
 import { SendMessageUseCase } from '@/application/use-cases/chat/SendMessageUseCase';
+import { GetConversationsUseCase } from '@/application/use-cases/chat/GetConversationsUseCase';
+import { CreateDMUseCase } from '@/application/use-cases/chat/CreateDMUseCase';
+import { GetConversationMessagesUseCase } from '@/application/use-cases/chat/GetConversationMessagesUseCase';
+import { SendConversationMessageUseCase } from '@/application/use-cases/chat/SendConversationMessageUseCase';
 
 export const container = {
   staff: {
@@ -37,5 +42,9 @@ export const container = {
     updateAccess:  new UpdateChatAccessUseCase(chatApi),
     getMessages:   new GetMessagesUseCase(chatMessageApi),
     sendMessage:   new SendMessageUseCase(chatMessageApi),
+    getConversations:          new GetConversationsUseCase(chatConversationApi),
+    createDM:                  new CreateDMUseCase(chatConversationApi),
+    getConversationMessages:   new GetConversationMessagesUseCase(chatConversationApi),
+    sendConversationMessage:   new SendConversationMessageUseCase(chatConversationApi),
   },
 };

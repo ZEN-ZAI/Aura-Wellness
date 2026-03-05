@@ -2,11 +2,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '@/application/stores/chatStore';
 import type { ChatMessage } from '@/domain/entities/ChatMessage';
 
-type WsOutgoing = { type: 'send_message'; content: string };
+type WsOutgoing = { type: 'send_message'; conversationId: string; content: string };
 
 interface UseChatWebSocketResult {
   /** Send a chat message through the WebSocket connection. */
-  sendMessage: (content: string) => void;
+  sendMessage: (conversationId: string, content: string) => void;
   /** Whether the socket is currently OPEN. */
   isConnected: () => boolean;
 }
@@ -17,7 +17,8 @@ interface UseChatWebSocketResult {
  * - On mount (or when buId changes) it opens ws://<host>/api/chat/ws/<buId>.
  *   The custom Next.js server (/server.ts) proxies the connection to the
  *   .NET backend, injecting the Authorization header from the httpOnly cookie.
- * - Incoming JSON frames are mapped to ChatMessage and appended to the store.
+ * - Incoming JSON frames are mapped to ChatMessage and appended to the store
+ *   by conversationId.
  * - Reconnects automatically after 3 seconds on unexpected closure.
  * - Closes cleanly on unmount (code 1000 — suppresses auto-reconnect).
  */
@@ -48,23 +49,23 @@ export function useChatWebSocket(buId: string): UseChatWebSocketResult {
 
       ws.onmessage = (e) => {
         try {
-          // Server sends ChatMessageServiceDto (camelCase):
-          // { id, workspaceId, personId, senderName, content, createdAt }
           const raw = JSON.parse(e.data as string) as {
             id: string;
+            conversationId: string;
             personId: string;
             senderName: string;
             content: string;
             createdAt: string;
           };
           const msg: ChatMessage = {
-            messageId:  raw.id,
-            personId:   raw.personId,
-            senderName: raw.senderName,
-            content:    raw.content,
-            createdAt:  raw.createdAt,
+            messageId:      raw.id,
+            conversationId: raw.conversationId,
+            personId:       raw.personId,
+            senderName:     raw.senderName,
+            content:        raw.content,
+            createdAt:      raw.createdAt,
           };
-          appendMessage(buIdRef.current, msg);
+          appendMessage(raw.conversationId, msg);
         } catch {
           // Ignore malformed frames.
         }
@@ -98,12 +99,12 @@ export function useChatWebSocket(buId: string): UseChatWebSocketResult {
     };
   }, [buId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sendMessage = useCallback((content: string) => {
+  const sendMessage = useCallback((conversationId: string, content: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected.');
     }
-    const msg: WsOutgoing = { type: 'send_message', content };
+    const msg: WsOutgoing = { type: 'send_message', conversationId, content };
     ws.send(JSON.stringify(msg));
   }, []);
 
