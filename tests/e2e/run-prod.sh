@@ -45,7 +45,7 @@ done
 
 if [[ "$HEADED" == true ]]; then
   export HEADLESS=false
-else
+elif [[ -z "${HEADLESS:-}" ]]; then
   export HEADLESS=true
 fi
 
