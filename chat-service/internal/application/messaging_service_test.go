@@ -30,8 +30,9 @@ func TestSendMessage_MemberNotFound_ReturnsError(t *testing.T) {
 	)
 
 	wsID := uuid.New()
+	convID := uuid.New()
 	pID := uuid.New()
-	_, err := svc.SendMessage(context.Background(), wsID, pID, "Alice", "Hello")
+	_, err := svc.SendMessage(context.Background(), wsID, convID, pID, "Alice", "Hello")
 
 	assert.ErrorIs(t, err, repoErr)
 }
@@ -47,7 +48,7 @@ func TestSendMessage_NoAccess_ReturnsErrChatAccessDenied(t *testing.T) {
 		&mocks.MockPubSub{},
 	)
 
-	_, err := svc.SendMessage(context.Background(), uuid.New(), uuid.New(), "Alice", "Hello")
+	_, err := svc.SendMessage(context.Background(), uuid.New(), uuid.New(), uuid.New(), "Alice", "Hello")
 
 	assert.ErrorIs(t, err, application.ErrChatAccessDenied)
 }
@@ -70,23 +71,25 @@ func TestSendMessage_SaveError_ReturnsError(t *testing.T) {
 		},
 	)
 
-	_, err := svc.SendMessage(context.Background(), uuid.New(), uuid.New(), "Alice", "Hello")
+	_, err := svc.SendMessage(context.Background(), uuid.New(), uuid.New(), uuid.New(), "Alice", "Hello")
 
 	assert.ErrorIs(t, err, saveErr)
 }
 
 func TestSendMessage_Success_ReturnsMessage(t *testing.T) {
 	wsID := uuid.New()
+	convID := uuid.New()
 	pID := uuid.New()
 	publishCalled := make(chan struct{}, 1)
 
 	savedMsg := entities.ChatMessage{
-		ID:          uuid.New(),
-		WorkspaceID: wsID,
-		PersonID:    pID,
-		SenderName:  "Alice",
-		Content:     "Hello",
-		CreatedAt:   time.Now().UTC(),
+		ID:             uuid.New(),
+		WorkspaceID:    wsID,
+		ConversationID: convID,
+		PersonID:       pID,
+		SenderName:     "Alice",
+		Content:        "Hello",
+		CreatedAt:      time.Now().UTC(),
 	}
 
 	svc := application.NewMessagingService(
@@ -108,7 +111,7 @@ func TestSendMessage_Success_ReturnsMessage(t *testing.T) {
 		},
 	)
 
-	got, err := svc.SendMessage(context.Background(), wsID, pID, "Alice", "Hello")
+	got, err := svc.SendMessage(context.Background(), wsID, convID, pID, "Alice", "Hello")
 
 	require.NoError(t, err)
 	assert.Equal(t, savedMsg.ID, got.ID)
@@ -125,15 +128,15 @@ func TestSendMessage_Success_ReturnsMessage(t *testing.T) {
 // ── ListMessages ──────────────────────────────────────────────────────────────
 
 func TestListMessages_DelegatesToRepo(t *testing.T) {
-	wsID := uuid.New()
+	convID := uuid.New()
 	before := time.Now().UTC()
 	limit := 10
 	expected := []entities.ChatMessage{{ID: uuid.New(), Content: "hi"}}
 
 	svc := application.NewMessagingService(
 		&mocks.MockMessageRepository{
-			ListFn: func(_ context.Context, w uuid.UUID, b time.Time, l int) ([]entities.ChatMessage, error) {
-				assert.Equal(t, wsID, w)
+			ListFn: func(_ context.Context, c uuid.UUID, b time.Time, l int) ([]entities.ChatMessage, error) {
+				assert.Equal(t, convID, c)
 				assert.Equal(t, before, b)
 				assert.Equal(t, limit, l)
 				return expected, nil
@@ -143,7 +146,7 @@ func TestListMessages_DelegatesToRepo(t *testing.T) {
 		&mocks.MockPubSub{},
 	)
 
-	got, err := svc.ListMessages(context.Background(), wsID, before, limit)
+	got, err := svc.ListMessages(context.Background(), convID, before, limit)
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, got)
