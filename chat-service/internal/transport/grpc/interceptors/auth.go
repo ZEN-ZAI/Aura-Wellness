@@ -22,7 +22,6 @@ func validate(ctx context.Context, apiKey string) error {
 }
 
 // UnaryAuthInterceptor validates x-internal-key for all unary RPCs.
-// This replaces per-handler authenticate() calls in the old ChatServer.
 func UnaryAuthInterceptor(apiKey string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if err := validate(ctx, apiKey); err != nil {

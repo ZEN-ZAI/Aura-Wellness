@@ -12,10 +12,11 @@ import (
 func NewServer(
 	workspaceSvc ports.WorkspaceService,
 	messagingSvc ports.MessagingService,
+	conversationSvc ports.ConversationService,
 	jwtSecret string,
 	addr string,
 ) *http.Server {
-	h := NewHandler(workspaceSvc, messagingSvc, jwtSecret)
+	h := NewHandler(workspaceSvc, messagingSvc, conversationSvc, jwtSecret)
 
 	mux := http.NewServeMux()
 

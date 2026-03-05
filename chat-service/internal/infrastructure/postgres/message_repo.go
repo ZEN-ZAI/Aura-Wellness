@@ -20,27 +20,27 @@ func NewMessageRepo(pool *pgxpool.Pool) *messageRepo {
 
 func (r *messageRepo) Save(ctx context.Context, m entities.ChatMessage) (entities.ChatMessage, error) {
 	row := r.pool.QueryRow(ctx,
-		`INSERT INTO chat_messages (workspace_id, person_id, sender_name, content)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, workspace_id, person_id, sender_name, content, created_at`,
-		m.WorkspaceID, m.PersonID, m.SenderName, m.Content,
+		`INSERT INTO chat_messages (workspace_id, conversation_id, person_id, sender_name, content)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id, workspace_id, conversation_id, person_id, sender_name, content, created_at`,
+		m.WorkspaceID, m.ConversationID, m.PersonID, m.SenderName, m.Content,
 	)
 	var out entities.ChatMessage
-	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.PersonID, &out.SenderName, &out.Content, &out.CreatedAt); err != nil {
+	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.ConversationID, &out.PersonID, &out.SenderName, &out.Content, &out.CreatedAt); err != nil {
 		return entities.ChatMessage{}, fmt.Errorf("save message: %w", err)
 	}
 	return out, nil
 }
 
 // List returns messages oldest-first, paginated by a before-timestamp cursor.
-func (r *messageRepo) List(ctx context.Context, workspaceID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error) {
+func (r *messageRepo) List(ctx context.Context, conversationID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, workspace_id, person_id, sender_name, content, created_at
+		`SELECT id, workspace_id, conversation_id, person_id, sender_name, content, created_at
 		 FROM chat_messages
-		 WHERE workspace_id = $1 AND created_at < $2
+		 WHERE conversation_id = $1 AND created_at < $2
 		 ORDER BY created_at DESC
 		 LIMIT $3`,
-		workspaceID, before, limit,
+		conversationID, before, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
@@ -50,7 +50,7 @@ func (r *messageRepo) List(ctx context.Context, workspaceID uuid.UUID, before ti
 	var messages []entities.ChatMessage
 	for rows.Next() {
 		var m entities.ChatMessage
-		if err := rows.Scan(&m.ID, &m.WorkspaceID, &m.PersonID, &m.SenderName, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.WorkspaceID, &m.ConversationID, &m.PersonID, &m.SenderName, &m.Content, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		messages = append(messages, m)

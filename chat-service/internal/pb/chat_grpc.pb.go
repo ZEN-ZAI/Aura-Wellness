@@ -19,15 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChatService_CreateWorkspace_FullMethodName    = "/chat.v1.ChatService/CreateWorkspace"
-	ChatService_GetWorkspaceByBuId_FullMethodName = "/chat.v1.ChatService/GetWorkspaceByBuId"
-	ChatService_GetWorkspaceById_FullMethodName   = "/chat.v1.ChatService/GetWorkspaceById"
-	ChatService_AddMember_FullMethodName          = "/chat.v1.ChatService/AddMember"
-	ChatService_UpdateMemberAccess_FullMethodName = "/chat.v1.ChatService/UpdateMemberAccess"
-	ChatService_ListMembers_FullMethodName        = "/chat.v1.ChatService/ListMembers"
-	ChatService_SendMessage_FullMethodName        = "/chat.v1.ChatService/SendMessage"
-	ChatService_ListMessages_FullMethodName       = "/chat.v1.ChatService/ListMessages"
-	ChatService_StreamMessages_FullMethodName     = "/chat.v1.ChatService/StreamMessages"
+	ChatService_CreateWorkspace_FullMethodName             = "/chat.v1.ChatService/CreateWorkspace"
+	ChatService_GetWorkspaceByBuId_FullMethodName          = "/chat.v1.ChatService/GetWorkspaceByBuId"
+	ChatService_GetWorkspaceById_FullMethodName            = "/chat.v1.ChatService/GetWorkspaceById"
+	ChatService_AddMember_FullMethodName                   = "/chat.v1.ChatService/AddMember"
+	ChatService_UpdateMemberAccess_FullMethodName          = "/chat.v1.ChatService/UpdateMemberAccess"
+	ChatService_ListMembers_FullMethodName                 = "/chat.v1.ChatService/ListMembers"
+	ChatService_SendMessage_FullMethodName                 = "/chat.v1.ChatService/SendMessage"
+	ChatService_ListMessages_FullMethodName                = "/chat.v1.ChatService/ListMessages"
+	ChatService_StreamMessages_FullMethodName              = "/chat.v1.ChatService/StreamMessages"
+	ChatService_GetOrCreateDM_FullMethodName               = "/chat.v1.ChatService/GetOrCreateDM"
+	ChatService_GetGroupConversation_FullMethodName        = "/chat.v1.ChatService/GetGroupConversation"
+	ChatService_ListConversations_FullMethodName           = "/chat.v1.ChatService/ListConversations"
+	ChatService_GetConversationParticipants_FullMethodName = "/chat.v1.ChatService/GetConversationParticipants"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -46,6 +50,11 @@ type ChatServiceClient interface {
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	// Server-side streaming — caller receives new messages in real time via Redis Pub/Sub
 	StreamMessages(ctx context.Context, in *StreamMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatMessage], error)
+	// Conversation management
+	GetOrCreateDM(ctx context.Context, in *GetOrCreateDMRequest, opts ...grpc.CallOption) (*Conversation, error)
+	GetGroupConversation(ctx context.Context, in *GetGroupConversationRequest, opts ...grpc.CallOption) (*Conversation, error)
+	ListConversations(ctx context.Context, in *ListConversationsRequest, opts ...grpc.CallOption) (*ListConversationsResponse, error)
+	GetConversationParticipants(ctx context.Context, in *GetConversationParticipantsRequest, opts ...grpc.CallOption) (*GetConversationParticipantsResponse, error)
 }
 
 type chatServiceClient struct {
@@ -155,6 +164,46 @@ func (c *chatServiceClient) StreamMessages(ctx context.Context, in *StreamMessag
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChatService_StreamMessagesClient = grpc.ServerStreamingClient[ChatMessage]
 
+func (c *chatServiceClient) GetOrCreateDM(ctx context.Context, in *GetOrCreateDMRequest, opts ...grpc.CallOption) (*Conversation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Conversation)
+	err := c.cc.Invoke(ctx, ChatService_GetOrCreateDM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) GetGroupConversation(ctx context.Context, in *GetGroupConversationRequest, opts ...grpc.CallOption) (*Conversation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Conversation)
+	err := c.cc.Invoke(ctx, ChatService_GetGroupConversation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ListConversations(ctx context.Context, in *ListConversationsRequest, opts ...grpc.CallOption) (*ListConversationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListConversationsResponse)
+	err := c.cc.Invoke(ctx, ChatService_ListConversations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) GetConversationParticipants(ctx context.Context, in *GetConversationParticipantsRequest, opts ...grpc.CallOption) (*GetConversationParticipantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConversationParticipantsResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetConversationParticipants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -171,6 +220,11 @@ type ChatServiceServer interface {
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	// Server-side streaming — caller receives new messages in real time via Redis Pub/Sub
 	StreamMessages(*StreamMessagesRequest, grpc.ServerStreamingServer[ChatMessage]) error
+	// Conversation management
+	GetOrCreateDM(context.Context, *GetOrCreateDMRequest) (*Conversation, error)
+	GetGroupConversation(context.Context, *GetGroupConversationRequest) (*Conversation, error)
+	ListConversations(context.Context, *ListConversationsRequest) (*ListConversationsResponse, error)
+	GetConversationParticipants(context.Context, *GetConversationParticipantsRequest) (*GetConversationParticipantsResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -207,6 +261,18 @@ func (UnimplementedChatServiceServer) ListMessages(context.Context, *ListMessage
 }
 func (UnimplementedChatServiceServer) StreamMessages(*StreamMessagesRequest, grpc.ServerStreamingServer[ChatMessage]) error {
 	return status.Error(codes.Unimplemented, "method StreamMessages not implemented")
+}
+func (UnimplementedChatServiceServer) GetOrCreateDM(context.Context, *GetOrCreateDMRequest) (*Conversation, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrCreateDM not implemented")
+}
+func (UnimplementedChatServiceServer) GetGroupConversation(context.Context, *GetGroupConversationRequest) (*Conversation, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetGroupConversation not implemented")
+}
+func (UnimplementedChatServiceServer) ListConversations(context.Context, *ListConversationsRequest) (*ListConversationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListConversations not implemented")
+}
+func (UnimplementedChatServiceServer) GetConversationParticipants(context.Context, *GetConversationParticipantsRequest) (*GetConversationParticipantsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetConversationParticipants not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -384,6 +450,78 @@ func _ChatService_StreamMessages_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChatService_StreamMessagesServer = grpc.ServerStreamingServer[ChatMessage]
 
+func _ChatService_GetOrCreateDM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrCreateDMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetOrCreateDM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetOrCreateDM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetOrCreateDM(ctx, req.(*GetOrCreateDMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_GetGroupConversation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetGroupConversationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetGroupConversation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetGroupConversation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetGroupConversation(ctx, req.(*GetGroupConversationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ListConversations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListConversationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ListConversations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ListConversations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ListConversations(ctx, req.(*ListConversationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_GetConversationParticipants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConversationParticipantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetConversationParticipants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetConversationParticipants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetConversationParticipants(ctx, req.(*GetConversationParticipantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +560,22 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMessages",
 			Handler:    _ChatService_ListMessages_Handler,
+		},
+		{
+			MethodName: "GetOrCreateDM",
+			Handler:    _ChatService_GetOrCreateDM_Handler,
+		},
+		{
+			MethodName: "GetGroupConversation",
+			Handler:    _ChatService_GetGroupConversation_Handler,
+		},
+		{
+			MethodName: "ListConversations",
+			Handler:    _ChatService_ListConversations_Handler,
+		},
+		{
+			MethodName: "GetConversationParticipants",
+			Handler:    _ChatService_GetConversationParticipants_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

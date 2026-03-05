@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,31 +23,35 @@ var upgrader = websocket.Upgrader{
 
 // outboundMessage is the JSON frame sent to the browser for each chat message.
 type outboundMessage struct {
-	ID         string    `json:"id"`
-	PersonID   string    `json:"personId"`
-	SenderName string    `json:"senderName"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversationId"`
+	PersonID       string    `json:"personId"`
+	SenderName     string    `json:"senderName"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // inboundMessage is the expected shape of frames coming from the browser.
 type inboundMessage struct {
-	Type    string `json:"type"` // "send_message"
-	Content string `json:"content"`
+	Type           string `json:"type"`           // "send_message"
+	ConversationID string `json:"conversationId"` // target conversation
+	Content        string `json:"content"`
 }
 
 // Handler handles WebSocket connections for a single workspace.
 type Handler struct {
-	workspaceSvc ports.WorkspaceService
-	messagingSvc ports.MessagingService
-	jwtSecret    string
+	workspaceSvc    ports.WorkspaceService
+	messagingSvc    ports.MessagingService
+	conversationSvc ports.ConversationService
+	jwtSecret       string
 }
 
-func NewHandler(wsSvc ports.WorkspaceService, msgSvc ports.MessagingService, jwtSecret string) *Handler {
+func NewHandler(wsSvc ports.WorkspaceService, msgSvc ports.MessagingService, convSvc ports.ConversationService, jwtSecret string) *Handler {
 	return &Handler{
-		workspaceSvc: wsSvc,
-		messagingSvc: msgSvc,
-		jwtSecret:    jwtSecret,
+		workspaceSvc:    wsSvc,
+		messagingSvc:    msgSvc,
+		conversationSvc: convSvc,
+		jwtSecret:       jwtSecret,
 	}
 }
 
@@ -79,50 +84,79 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request, buIDStr string
 		return
 	}
 
-	// ── 4. Upgrade the HTTP connection to WebSocket ──────────────────────────
+	// ── 4. Fetch conversations this user participates in ─────────────────────
+	conversations, err := h.conversationSvc.ListConversations(ctx, ws.ID, claims.PersonID)
+	if err != nil {
+		http.Error(w, "failed to load conversations", http.StatusInternalServerError)
+		return
+	}
+
+	// ── 5. Upgrade the HTTP connection to WebSocket ──────────────────────────
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		// upgrader writes the error response itself
 		log.Printf("[ws] upgrade error buId=%s: %v", buIDStr, err)
 		return
 	}
 	defer conn.Close()
 
-	log.Printf("[ws] connected personId=%s buId=%s", claims.PersonID, buIDStr)
+	log.Printf("[ws] connected personId=%s buId=%s conversations=%d", claims.PersonID, buIDStr, len(conversations))
 
-	// ── 5. Subscribe to new messages (write pump) ────────────────────────────
+	// ── 6. Subscribe to ALL conversations (write pump) ───────────────────────
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
-	msgCh, cleanup, err := h.messagingSvc.StreamMessages(streamCtx, ws.ID)
-	if err != nil {
-		log.Printf("[ws] stream error: %v", err)
-		conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "stream unavailable"))
-		return
-	}
-	defer cleanup()
+	// Mutex protects concurrent writes to the WebSocket connection.
+	var writeMu sync.Mutex
 
-	// Write pump: forward messages from the subscription to the browser.
-	writeDone := make(chan struct{})
-	go func() {
-		defer close(writeDone)
-		for msg := range msgCh {
-			frame := outboundMessage{
-				ID:         msg.ID.String(),
-				PersonID:   msg.PersonID.String(),
-				SenderName: msg.SenderName,
-				Content:    msg.Content,
-				CreatedAt:  msg.CreatedAt,
-			}
-			if err := conn.WriteJSON(frame); err != nil {
-				log.Printf("[ws] write error: %v", err)
-				return
-			}
+	// Track cleanup functions for all subscriptions.
+	var cleanups []func()
+	defer func() {
+		for _, fn := range cleanups {
+			fn()
 		}
 	}()
 
-	// ── 6. Read pump: handle incoming frames from the browser ────────────────
+	writeDone := make(chan struct{})
+	var wg sync.WaitGroup
+
+	for _, conv := range conversations {
+		msgCh, cleanup, err := h.messagingSvc.StreamMessages(streamCtx, conv.ID)
+		if err != nil {
+			log.Printf("[ws] stream error convId=%s: %v", conv.ID, err)
+			continue
+		}
+		cleanups = append(cleanups, cleanup)
+		convID := conv.ID.String()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for msg := range msgCh {
+				frame := outboundMessage{
+					ID:             msg.ID.String(),
+					ConversationID: convID,
+					PersonID:       msg.PersonID.String(),
+					SenderName:     msg.SenderName,
+					Content:        msg.Content,
+					CreatedAt:      msg.CreatedAt,
+				}
+				writeMu.Lock()
+				writeErr := conn.WriteJSON(frame)
+				writeMu.Unlock()
+				if writeErr != nil {
+					log.Printf("[ws] write error: %v", writeErr)
+					return
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(writeDone)
+	}()
+
+	// ── 7. Read pump: handle incoming frames from the browser ────────────────
 	conn.SetReadLimit(4096) // 4 KB max per frame
 	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	conn.SetPongHandler(func(string) error {
@@ -136,7 +170,10 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request, buIDStr string
 
 	go func() {
 		for range pingTicker.C {
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			writeMu.Lock()
+			pingErr := conn.WriteMessage(websocket.PingMessage, nil)
+			writeMu.Unlock()
+			if pingErr != nil {
 				return
 			}
 		}
@@ -158,8 +195,14 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request, buIDStr string
 			continue // ignore unknown frame types
 		}
 
+		convID, err := uuid.Parse(inbound.ConversationID)
+		if err != nil {
+			log.Printf("[ws] invalid conversationId from client: %v", err)
+			continue
+		}
+
 		if _, err := h.messagingSvc.SendMessage(
-			ctx, ws.ID, claims.PersonID, claims.SenderName, inbound.Content,
+			ctx, ws.ID, convID, claims.PersonID, claims.SenderName, inbound.Content,
 		); err != nil {
 			log.Printf("[ws] send message error: %v", err)
 		}

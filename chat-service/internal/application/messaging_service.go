@@ -21,7 +21,7 @@ func NewMessagingService(mr ports.MessageRepository, mem ports.MemberRepository,
 
 // SendMessage verifies the caller has chat access, persists the message, and
 // fire-and-forgets a Redis publish so Redis failures never block the RPC.
-func (s *MessagingService) SendMessage(ctx context.Context, workspaceID, personID uuid.UUID, senderName, content string) (entities.ChatMessage, error) {
+func (s *MessagingService) SendMessage(ctx context.Context, workspaceID, conversationID, personID uuid.UUID, senderName, content string) (entities.ChatMessage, error) {
 	member, err := s.memberRepo.GetByWorkspaceAndPerson(ctx, workspaceID, personID)
 	if err != nil {
 		return entities.ChatMessage{}, err
@@ -30,7 +30,7 @@ func (s *MessagingService) SendMessage(ctx context.Context, workspaceID, personI
 		return entities.ChatMessage{}, ErrChatAccessDenied
 	}
 
-	msg, err := entities.NewMessage(workspaceID, personID, senderName, content)
+	msg, err := entities.NewMessage(workspaceID, conversationID, personID, senderName, content)
 	if err != nil {
 		return entities.ChatMessage{}, err
 	}
@@ -40,22 +40,23 @@ func (s *MessagingService) SendMessage(ctx context.Context, workspaceID, personI
 		return entities.ChatMessage{}, err
 	}
 
+	// Publish to the conversation channel for real-time delivery
 	go func() {
-		_ = s.pubsub.Publish(context.Background(), workspaceID.String(), ports.MessageEvent{Message: saved})
+		_ = s.pubsub.Publish(context.Background(), conversationID.String(), ports.MessageEvent{Message: saved})
 	}()
 
 	return saved, nil
 }
 
-func (s *MessagingService) ListMessages(ctx context.Context, workspaceID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error) {
-	return s.messageRepo.List(ctx, workspaceID, before, limit)
+func (s *MessagingService) ListMessages(ctx context.Context, conversationID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error) {
+	return s.messageRepo.List(ctx, conversationID, before, limit)
 }
 
-// StreamMessages subscribes to the workspace Pub/Sub channel and returns a
+// StreamMessages subscribes to the conversation Pub/Sub channel and returns a
 // typed channel of ChatMessages. The caller must invoke the returned cleanup
 // function when done (e.g. via defer) to release the subscription.
-func (s *MessagingService) StreamMessages(ctx context.Context, workspaceID uuid.UUID) (<-chan entities.ChatMessage, func(), error) {
-	eventCh, cleanup, err := s.pubsub.Subscribe(ctx, workspaceID.String())
+func (s *MessagingService) StreamMessages(ctx context.Context, conversationID uuid.UUID) (<-chan entities.ChatMessage, func(), error) {
+	eventCh, cleanup, err := s.pubsub.Subscribe(ctx, conversationID.String())
 	if err != nil {
 		return nil, nil, err
 	}

@@ -27,11 +27,15 @@ func (h *MessagingHandler) SendMessage(ctx context.Context, req *pb.SendMessageR
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workspace_id: %v", err)
 	}
+	convID, err := uuid.Parse(req.ConversationId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid conversation_id: %v", err)
+	}
 	pID, err := uuid.Parse(req.PersonId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid person_id: %v", err)
 	}
-	msg, err := h.svc.SendMessage(ctx, wsID, pID, req.SenderName, req.Content)
+	msg, err := h.svc.SendMessage(ctx, wsID, convID, pID, req.SenderName, req.Content)
 	if err != nil {
 		return nil, toGrpcError(err)
 	}
@@ -39,9 +43,9 @@ func (h *MessagingHandler) SendMessage(ctx context.Context, req *pb.SendMessageR
 }
 
 func (h *MessagingHandler) ListMessages(ctx context.Context, req *pb.ListMessagesRequest) (*pb.ListMessagesResponse, error) {
-	wsID, err := uuid.Parse(req.WorkspaceId)
+	convID, err := uuid.Parse(req.ConversationId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid workspace_id: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid conversation_id: %v", err)
 	}
 
 	before := time.Now().UTC().Add(time.Second)
@@ -53,7 +57,7 @@ func (h *MessagingHandler) ListMessages(ctx context.Context, req *pb.ListMessage
 		limit = 50
 	}
 
-	msgs, err := h.svc.ListMessages(ctx, wsID, before, limit)
+	msgs, err := h.svc.ListMessages(ctx, convID, before, limit)
 	if err != nil {
 		return nil, toGrpcError(err)
 	}
@@ -64,15 +68,14 @@ func (h *MessagingHandler) ListMessages(ctx context.Context, req *pb.ListMessage
 	return &pb.ListMessagesResponse{Messages: protoMsgs}, nil
 }
 
-// StreamMessages subscribes to the workspace channel and streams messages to the client.
-// The handler delegates channel management entirely to the service layer.
+// StreamMessages subscribes to the conversation channel and streams messages to the client.
 func (h *MessagingHandler) StreamMessages(req *pb.StreamMessagesRequest, stream pb.ChatService_StreamMessagesServer) error {
-	wsID, err := uuid.Parse(req.WorkspaceId)
+	convID, err := uuid.Parse(req.ConversationId)
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "invalid workspace_id: %v", err)
+		return status.Errorf(codes.InvalidArgument, "invalid conversation_id: %v", err)
 	}
 
-	msgCh, cleanup, err := h.svc.StreamMessages(stream.Context(), wsID)
+	msgCh, cleanup, err := h.svc.StreamMessages(stream.Context(), convID)
 	if err != nil {
 		return toGrpcError(err)
 	}
@@ -95,11 +98,12 @@ func (h *MessagingHandler) StreamMessages(req *pb.StreamMessagesRequest, stream 
 
 func messageToProto(m entities.ChatMessage) *pb.ChatMessage {
 	return &pb.ChatMessage{
-		Id:          m.ID.String(),
-		WorkspaceId: m.WorkspaceID.String(),
-		PersonId:    m.PersonID.String(),
-		SenderName:  m.SenderName,
-		Content:     m.Content,
-		CreatedAt:   timestamppb.New(m.CreatedAt),
+		Id:             m.ID.String(),
+		WorkspaceId:    m.WorkspaceID.String(),
+		ConversationId: m.ConversationID.String(),
+		PersonId:       m.PersonID.String(),
+		SenderName:     m.SenderName,
+		Content:        m.Content,
+		CreatedAt:      timestamppb.New(m.CreatedAt),
 	}
 }

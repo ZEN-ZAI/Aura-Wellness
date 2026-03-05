@@ -38,16 +38,18 @@ func main() {
 	workspaceRepo := infraPostgres.NewWorkspaceRepo(pool)
 	memberRepo := infraPostgres.NewMemberRepo(pool)
 	messageRepo := infraPostgres.NewMessageRepo(pool)
+	conversationRepo := infraPostgres.NewConversationRepo(pool)
 
 	// Application layer — services depend only on port interfaces
 	workspaceSvc := application.NewWorkspaceService(workspaceRepo, memberRepo)
 	messagingSvc := application.NewMessagingService(messageRepo, memberRepo, pubsub)
+	conversationSvc := application.NewConversationService(conversationRepo)
 
 	// Transport layer — gRPC server with interceptors + handlers
-	srv := transportGrpc.NewServer(workspaceSvc, messagingSvc, cfg.InternalAPIKey)
+	srv := transportGrpc.NewServer(workspaceSvc, messagingSvc, conversationSvc, cfg.InternalAPIKey)
 
 	// WebSocket HTTP server — used by the Next.js proxy for browser clients
-	wsSrv := transportWs.NewServer(workspaceSvc, messagingSvc, cfg.JWTSecret, ":"+cfg.WsPort)
+	wsSrv := transportWs.NewServer(workspaceSvc, messagingSvc, conversationSvc, cfg.JWTSecret, ":"+cfg.WsPort)
 	go func() {
 		log.Printf("WebSocket chat service listening on :%s", cfg.WsPort)
 		if err := wsSrv.ListenAndServe(); err != nil {
