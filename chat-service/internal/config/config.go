@@ -23,7 +23,7 @@ func Load() *Config {
 		DBUser:         getEnv("DB_USER", "chat_user"),
 		DBPassword:     getEnv("DB_PASSWORD", "changeme_chat"),
 		InternalAPIKey: getEnv("INTERNAL_API_KEY", "dev_internal_key"),
-		Port:           getEnv("PORT", "50051"),
+		Port:           getEnv("GRPC_PORT", getEnv("PORT", "50051")),
 		WsPort:         getEnv("WS_PORT", "8080"),
 		RedisAddr:      getEnv("REDIS_ADDR", "localhost:6379"),
 		JWTSecret:      getEnv("JWT_SECRET", ""),
