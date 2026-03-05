@@ -11,7 +11,7 @@ Design and build a working full-stack Minimum Viable Product (MVP) for a B2B mul
 
 - **Frontend:** Next.js 16 (React 19, TypeScript, Ant Design, Zustand, Tailwind CSS v4)
 - **Backend:** .NET 10 Web API (Clean Architecture, EF Core, JWT Auth, gRPC client)
-- **Chat Service:** Golang (standalone gRPC microservice with WebSocket support for real-time messaging)
+- **Chat Service:** Golang (standalone gRPC microservice + separate WebSocket service for real-time messaging)
 - **Databases:** PostgreSQL 16 (main + chat — separate instances), Redis 7 (pub/sub for real-time chat)
 - **System Design Document:** See [docs/system-design.md](docs/system-design.md) for architecture diagrams, ER diagrams, and multi-tenancy/inter-service communication details.
 
@@ -82,10 +82,13 @@ After startup, a demo company is pre-seeded:
 |---|---|---|
 | Frontend (Next.js + custom WS server) | 3000 | Main UI; BFF proxy for API + WebSocket |
 | Backend (.NET 10 Web API) | 5001 | REST API + JWT auth + gRPC client |
-| Chat Service (Go gRPC + WS) | 50051 / 8080 | gRPC for workspace management, WS for real-time chat |
+| Chat Service (Go gRPC) | 50051 | gRPC for workspace management |
+| Chat Service (Go WS) | 8080 | WebSocket for real-time chat |
 | PostgreSQL — main | 15432 | `aura_wellness` DB |
 | PostgreSQL — chat | 15433 | `aura_chat` DB |
 | Redis | 6379 | Chat message pub/sub |
+
+> **Production (Cloud Run):** gRPC and WebSocket are deployed as separate Cloud Run services (`chat-service` and `chat-ws`) from the same image. Cloud Run requires `--use-http2` for gRPC, which is incompatible with WebSocket upgrades (HTTP/1.1). The `GRPC_PORT` env var controls the gRPC listener port independently.
 
 ---
 
@@ -100,6 +103,7 @@ Defined in `.env` (copy from `.env.example`):
 | `JWT_SECRET` | HMAC-SHA256 secret for signing JWTs (≥ 32 chars) | `super_secret_jwt_key_minimum_32_characters_long` |
 | `INTERNAL_API_KEY` | Shared key protecting Go gRPC service | `internal_service_shared_secret_key` |
 | `DEFAULT_STAFF_PASSWORD` | Default password for new staff accounts | `P@ssw0rd` |
+| `GRPC_PORT` | Override the gRPC listener port (defaults to `PORT`, then `50051`) | `50051` |
 
 ---
 
@@ -149,7 +153,7 @@ Browser
        ├─ Server-side rendered React pages
        ├─ /api/proxy/* → backend:8080 (BFF with httpOnly cookie → Bearer token)
        ├─ /api/auth/*  → backend:8080 (login/logout with cookie management)
-       └─ /api/chat/ws/:buId → chat-service:8080 (WebSocket proxy)
+       └─ /api/chat/ws/:buId → chat-ws:8080 (WebSocket proxy)
                       │
                       ▼
                .NET Backend (port 8080)
@@ -158,9 +162,9 @@ Browser
                       └─ Redis → Chat message streaming
                                       │
                                       ▼
-                             Go Chat Service
-                                ├─ gRPC :50051 (workspace/member management)
-                                ├─ WS   :8080  (real-time message streaming)
+                             Go Chat Service (same image, two Cloud Run services)
+                                ├─ chat-service  :50051 gRPC  (workspace/member mgmt)
+                                ├─ chat-ws       :8080  WS    (real-time messaging)
                                 ├─ pgx  → PostgreSQL (aura_chat)
                                 └─ Redis pub/sub (message broadcast)
 ```

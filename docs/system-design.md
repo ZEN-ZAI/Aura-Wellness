@@ -20,7 +20,7 @@
 |---|---|
 | Frontend | Next.js 16, React 19, TypeScript, Ant Design, Zustand, Tailwind CSS v4 |
 | Backend | .NET 10 Web API, Clean Architecture, EF Core 10 + Npgsql, JWT Bearer, gRPC Client |
-| Chat Microservice | Go (gRPC, WebSocket, pgx/v5, golang-migrate, Redis pub/sub) |
+| Chat Microservice | Go (gRPC + WebSocket, pgx/v5, golang-migrate, Redis pub/sub) — deployed as two Cloud Run services from one image |
 | Databases | PostgreSQL 16 — two isolated instances: `aura_wellness`, `aura_chat` |
 | Cache / Pub-Sub | Redis 7 — real-time chat message streaming |
 | Containers | Docker Compose |
@@ -41,8 +41,11 @@ graph LR
         API[".NET Web API\n(Clean Architecture)"]
     end
 
-    subgraph chat ["Chat Service Container (Go)"]
+    subgraph chat_grpc ["chat-service (Cloud Run, --use-http2)"]
         GRPC["gRPC Server :50051"]
+    end
+
+    subgraph chat_ws ["chat-ws (Cloud Run, HTTP/1.1)"]
         WS["WebSocket Server :8080"]
     end
 
@@ -74,9 +77,20 @@ graph LR
 
 1. **Browser → Next.js**: All traffic enters through the Next.js custom server on port 3000.
 2. **BFF Proxy**: API calls from the client go through `/api/proxy/*` route handlers, which read the JWT from an httpOnly cookie and inject it as a Bearer token before forwarding to the .NET backend.
-3. **WebSocket Proxy**: Real-time chat connections to `/api/chat/ws/:buId` are upgraded server-side. The custom server reads the httpOnly cookie, opens a backend WebSocket to the Go chat service with the Authorization header, and bidirectionally proxies frames.
-4. **Backend → Chat Service**: The .NET backend communicates with the Go chat service via gRPC for workspace/member management operations. An `x-internal-key` header authenticates these calls.
-5. **Real-Time Flow**: When a message is sent, the Go chat service persists it to PostgreSQL and publishes to Redis. WebSocket subscribers on the same workspace channel receive the message in real-time.
+3. **WebSocket Proxy**: Real-time chat connections to `/api/chat/ws/:buId` are upgraded server-side. The custom server reads the httpOnly cookie, opens a backend WebSocket to the `chat-ws` service with the Authorization header, and bidirectionally proxies frames.
+4. **Backend → Chat Service**: The .NET backend communicates with the Go chat service via gRPC (`chat-service`) for workspace/member management operations. An `x-internal-key` header authenticates these calls.
+5. **Real-Time Flow**: When a message is sent, the Go chat service persists it to PostgreSQL and publishes to Redis. WebSocket subscribers on the same conversation channel receive the message in real-time.
+
+### Production Deployment (Cloud Run)
+
+Cloud Run requires `--use-http2` for gRPC but WebSocket upgrades need HTTP/1.1 — these are mutually exclusive. The Go binary is therefore deployed as **two separate Cloud Run services** from the same container image:
+
+| Service | Port | Cloud Run flags | Purpose |
+|---|---|---|---|
+| `chat-service` | 50051 | `--use-http2`, `--ingress=internal` | gRPC: workspace & member management |
+| `chat-ws` | 8080 | `--session-affinity`, `--ingress=internal`, `--timeout=3600` | WebSocket: real-time messaging |
+
+The `GRPC_PORT` env var overrides the gRPC listener port (defaults to `PORT` → `50051`) so both listeners can coexist in the same binary without port conflicts. The frontend requires a VPC connector (`--vpc-egress=all-traffic`) to reach internal services.
 
 ---
 
@@ -345,6 +359,7 @@ The chat service is internal and not directly exposed to the browser. Workspace 
 | Multi-tenancy model | Shared schema + `company_id` discriminator | Simpler operations and deployment for MVP; avoids schema-per-tenant complexity |
 | Inter-service communication | gRPC (protobuf) | Type-safe contracts, efficient binary serialization, server-side streaming for real-time messages |
 | Real-time messaging | WebSocket + Redis pub/sub | Low-latency bidirectional communication; Redis enables horizontal scaling of chat service instances |
+| Chat service split | Two Cloud Run services from one image | Cloud Run's `--use-http2` (required for gRPC) is incompatible with WebSocket upgrades (HTTP/1.1); `GRPC_PORT` env var avoids port conflicts |
 | Chat DB isolation | Separate PostgreSQL instance (`aura_chat`) | Enforces a clean service boundary; chat service owns its own data and schema migrations |
 | Onboarding transaction boundary | DB transaction for steps 1-5; gRPC calls after commit | Ensures core tenant data is consistent; chat failures return 500 but do not corrupt main DB state |
 | JWT storage (frontend) | httpOnly cookies (via BFF proxy) | Mitigates XSS token theft; token never exposed to client-side JavaScript |
