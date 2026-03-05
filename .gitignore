@@ -1,6 +1,15 @@
 # macOS
 .DS_Store
 
+# Claude
+.claude/
+
+# Docs
+Software_Engineer_Coding_Assessment.pdf
+
+# Lock files
+package-lock.json
+
 # Environment files
 .env
 .env.*
@@ -56,3 +65,10 @@ chat-service/vendor/
 
 # Docker
 .docker/
+
+# Claude
+.claude/
+
+# Misc
+package-lock.json
+Software_Engineer_Coding_Assessment.pdf
