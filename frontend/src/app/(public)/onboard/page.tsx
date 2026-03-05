@@ -8,7 +8,10 @@ const { Title, Text } = Typography;
 
 interface OnboardFields {
   companyName: string;
+  address: string;
+  contactNumber: string;
   ownerFirstName: string;
+  ownerLastName: string;
   ownerEmail: string;
   ownerPassword: string;
   ownerConfirmPassword: string;
@@ -45,7 +48,7 @@ export default function OnboardPage() {
 
   const pageWrapStyle: React.CSSProperties = {
     height: '100vh',
-    overflow: 'hidden',
+    overflowY: 'auto',
     background: 'linear-gradient(160deg, #F8F5F0 0%, #EDE8E0 55%, #F0EBE3 100%)',
     display: 'flex',
     alignItems: 'center',
@@ -198,6 +201,28 @@ export default function OnboardPage() {
               />
             </Form.Item>
 
+            <Form.Item
+              label="Address"
+              name="address"
+              rules={[{ required: true }]}
+            >
+              <Input
+                placeholder="e.g. 123 Wellness Ave, Suite 200"
+                style={{ background: '#FDFCFA' }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Contact Number"
+              name="contactNumber"
+              rules={[{ required: true }]}
+            >
+              <Input
+                placeholder="e.g. 555-0100"
+                style={{ background: '#FDFCFA' }}
+              />
+            </Form.Item>
+
             <Text style={{ ...sectionLabelStyle, marginTop: 8 }}>Owner Account</Text>
 
             <Form.Item
@@ -206,6 +231,14 @@ export default function OnboardPage() {
               rules={[{ required: true }]}
             >
               <Input placeholder="Your first name" style={{ background: '#FDFCFA' }} />
+            </Form.Item>
+
+            <Form.Item
+              label="Last Name"
+              name="ownerLastName"
+              rules={[{ required: true }]}
+            >
+              <Input placeholder="Your last name" style={{ background: '#FDFCFA' }} />
             </Form.Item>
 
             <Form.Item

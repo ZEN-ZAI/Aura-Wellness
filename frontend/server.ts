@@ -73,14 +73,18 @@ app.prepare().then(() => {
         // Browser → Backend
         browserWs.on('message', (data) => {
           if (backendWs.readyState === WebSocket.OPEN) {
-            backendWs.send(data);
+            backendWs.send(data.toString());
           }
         });
 
         // Backend → Browser
+        // Convert Buffer to string so ws sends a text frame (opcode 1) instead
+        // of a binary frame (opcode 2).  The browser WebSocket API delivers text
+        // frames as strings to onmessage, which the frontend JSON.parse expects.
+        // Without this, the browser receives a Blob and JSON.parse silently fails.
         backendWs.on('message', (data) => {
           if (browserWs.readyState === WebSocket.OPEN) {
-            browserWs.send(data);
+            browserWs.send(data.toString());
           }
         });
 
