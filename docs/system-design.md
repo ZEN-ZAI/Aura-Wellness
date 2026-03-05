@@ -8,8 +8,9 @@
 4. [Multi-Tenancy Strategy](#multi-tenancy-strategy)
 5. [Authentication & Authorization Flow](#authentication--authorization-flow)
 6. [Onboarding Flow](#onboarding-flow)
-7. [API Reference](#api-reference)
-8. [Key Architectural Trade-offs](#key-architectural-trade-offs)
+7. [Real-Time Chat Architecture](#real-time-chat-architecture)
+8. [API Reference](#api-reference)
+9. [Key Architectural Trade-offs](#key-architectural-trade-offs)
 
 ---
 
@@ -17,10 +18,11 @@
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, TailwindCSS v4, TanStack Query, React Router v6 |
-| Backend | .NET 10 Web API, Clean Architecture, EF Core + Npgsql, JWT Bearer |
-| Chat Microservice | Go (Gin, pgx/v5, golang-migrate) |
+| Frontend | Next.js 16, React 19, TypeScript, Ant Design, Zustand, Tailwind CSS v4 |
+| Backend | .NET 10 Web API, Clean Architecture, EF Core 10 + Npgsql, JWT Bearer, gRPC Client |
+| Chat Microservice | Go (gRPC, WebSocket, pgx/v5, golang-migrate, Redis pub/sub) |
 | Databases | PostgreSQL 16 — two isolated instances: `aura_wellness`, `aura_chat` |
+| Cache / Pub-Sub | Redis 7 — real-time chat message streaming |
 | Containers | Docker Compose |
 
 ---
@@ -31,16 +33,17 @@
 graph LR
     Browser["Browser"]
 
-    subgraph frontend ["Frontend Container (nginx:3000)"]
-        FE["React SPA"]
+    subgraph frontend ["Frontend Container (Next.js:3000)"]
+        FE["Next.js Custom Server\n(SSR + BFF Proxy + WS Proxy)"]
     end
 
     subgraph backend ["Backend Container (.NET:8080)"]
         API[".NET Web API\n(Clean Architecture)"]
     end
 
-    subgraph chat ["Chat Service Container (Go:8080)"]
-        CS["Go Gin Service"]
+    subgraph chat ["Chat Service Container (Go)"]
+        GRPC["gRPC Server :50051"]
+        WS["WebSocket Server :8080"]
     end
 
     subgraph db_main ["postgres-main"]
@@ -51,14 +54,29 @@ graph LR
         PG2[("PostgreSQL 16\naura_chat")]
     end
 
-    Browser -->|HTTP| FE
-    FE -->|"/api/* proxy"| API
-    API -->|EF Core / Npgsql| PG1
-    API -->|"HTTP (X-Internal-Key)"| CS
-    CS -->|pgx/v5| PG2
+    subgraph redis_node ["redis"]
+        REDIS[("Redis 7\nPub/Sub")]
+    end
+
+    Browser -->|"HTTP / SSR"| FE
+    Browser -->|"WebSocket"| FE
+    FE -->|"/api/proxy/* (BFF)"| API
+    FE -->|"/api/chat/ws/:buId"| WS
+    API -->|"EF Core / Npgsql"| PG1
+    API -->|"gRPC (x-internal-key)"| GRPC
+    GRPC -->|pgx/v5| PG2
+    GRPC -->|"Publish"| REDIS
+    WS -->|"Subscribe"| REDIS
+    WS -->|pgx/v5| PG2
 ```
 
-All browser traffic hits the nginx-served React SPA. Requests to `/api/*` are reverse-proxied by nginx to the .NET backend. The .NET backend owns the main PostgreSQL database directly and calls the Go chat service over HTTP for all chat-related operations.
+### Request Flow
+
+1. **Browser → Next.js**: All traffic enters through the Next.js custom server on port 3000.
+2. **BFF Proxy**: API calls from the client go through `/api/proxy/*` route handlers, which read the JWT from an httpOnly cookie and inject it as a Bearer token before forwarding to the .NET backend.
+3. **WebSocket Proxy**: Real-time chat connections to `/api/chat/ws/:buId` are upgraded server-side. The custom server reads the httpOnly cookie, opens a backend WebSocket to the Go chat service with the Authorization header, and bidirectionally proxies frames.
+4. **Backend → Chat Service**: The .NET backend communicates with the Go chat service via gRPC for workspace/member management operations. An `x-internal-key` header authenticates these calls.
+5. **Real-Time Flow**: When a message is sent, the Go chat service persists it to PostgreSQL and publishes to Redis. WebSocket subscribers on the same workspace channel receive the message in real-time.
 
 ---
 
@@ -199,31 +217,31 @@ Role-based access is enforced per endpoint using the `role` claim. The `companyI
 
 ## Onboarding Flow
 
-Company onboarding is handled by `POST /api/companies/onboard` and is split into two phases: a database transaction and subsequent out-of-transaction Go HTTP calls.
+Company onboarding is handled by `POST /api/companies/onboard` and is split into two phases: a database transaction and subsequent out-of-transaction gRPC calls to the Go chat service.
 
 ```mermaid
 sequenceDiagram
     actor Client
     participant API as .NET Backend
     participant DB as aura_wellness DB
-    participant CS as Go Chat Service
+    participant CS as Go Chat Service (gRPC)
 
-    Client->>API: POST /api/companies/onboard { companyName, firstName, lastName, email }
+    Client->>API: POST /api/companies/onboard { companyName, address, contactNumber, firstName, lastName, email, password }
 
     rect rgb(220, 240, 220)
         note over API, DB: EF Core DB Transaction
         API->>DB: 1. INSERT companies → companyId
         API->>DB: 2. INSERT business_units (name = "{CompanyName} HQ") → buId
         API->>DB: 3. INSERT persons (firstName, lastName) → personId
-        API->>API: 4. BCrypt hash "P@ssw0rd"
+        API->>API: 4. BCrypt hash password
         API->>DB: 5. INSERT bu_staff_profiles (email, hash, role=Owner, buId)
         DB-->>API: COMMIT
     end
 
     rect rgb(220, 230, 245)
-        note over API, CS: Post-commit Go HTTP calls
-        API->>CS: 6. POST /api/workspaces → workspaceId
-        API->>CS: 7. POST /api/workspaces/{workspaceId}/members (Owner as Admin)
+        note over API, CS: Post-commit gRPC calls
+        API->>CS: 6. CreateWorkspace(buId, companyId, name) → workspaceId
+        API->>CS: 7. AddMember(workspaceId, personId, role=Admin)
     end
 
     alt Steps 6-7 succeed
@@ -237,9 +255,41 @@ sequenceDiagram
 ### Transaction Boundary Notes
 
 - Steps 1-5 run inside a single EF Core `IDbContextTransaction`. If any step fails, the entire transaction rolls back and no data is persisted.
-- Steps 6-7 execute after the transaction is committed. If either Go HTTP call fails, the .NET backend returns a 500 to the client, but the already-committed database records in `aura_wellness` are not rolled back.
+- Steps 6-7 execute after the transaction is committed. If either gRPC call fails, the .NET backend returns a 500 to the client, but the already-committed database records in `aura_wellness` are not rolled back.
 - This is an acknowledged MVP trade-off: a compensating transaction or saga pattern would be required for full distributed consistency.
-- The default password `P@ssw0rd` is set via environment variable and used for all newly created staff accounts. Owners are expected to prompt users to change their password on first login.
+- The owner sets their own password during onboarding. For staff accounts created by the Owner, the `DEFAULT_STAFF_PASSWORD` environment variable is used as the initial password.
+
+---
+
+## Real-Time Chat Architecture
+
+```mermaid
+sequenceDiagram
+    actor Sender as Sender (Browser)
+    participant FE as Next.js WS Proxy
+    participant WS as Go WS Server :8080
+    participant PG as aura_chat DB
+    participant Redis as Redis Pub/Sub
+    participant WS2 as Go WS Server :8080
+    participant FE2 as Next.js WS Proxy
+    actor Receiver as Receiver (Browser)
+
+    Sender->>FE: WebSocket frame { type: "send_message", content: "Hello" }
+    FE->>WS: Proxy frame (with Authorization header)
+    WS->>WS: Verify member has chat access
+    WS->>PG: INSERT chat_messages
+    WS-->>Redis: PUBLISH chat:{workspaceId} (fire-and-forget)
+    Redis-->>WS2: Subscription notification
+    WS2->>FE2: WebSocket frame { id, workspaceId, personId, senderName, content, createdAt }
+    FE2->>Receiver: Render message in UI
+```
+
+### Key Design Decisions
+
+- **Fire-and-forget publish**: The Redis PUBLISH runs in a goroutine so message persistence is not blocked by pub/sub latency.
+- **Cursor-based pagination**: Message history uses timestamp-based cursors for efficient pagination without offset drift.
+- **Access verification**: Every message send verifies the sender has `has_access = true` in the workspace. Denied users receive a gRPC `PermissionDenied` status.
+- **WebSocket proxy**: The Next.js custom server proxies WebSocket connections because the JWT is stored in an httpOnly cookie (inaccessible to client-side JavaScript). The server reads the cookie and injects the Authorization header when connecting to the Go WebSocket endpoint.
 
 ---
 
@@ -247,33 +297,44 @@ sequenceDiagram
 
 ### .NET Backend
 
-Base path: `/api` (proxied from nginx)
+Base path: `/api` (proxied through Next.js BFF)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/api/companies/onboard` | Public | Full company + owner account setup |
 | `POST` | `/api/auth/login` | Public | Login with email/password, returns JWT |
+| `GET` | `/api/auth/me` | Any authenticated | Debug: show current claims |
+| `PUT` | `/api/auth/password` | Any authenticated | Change password |
 | `GET` | `/api/business-units` | Any authenticated | List all BUs for the caller's company |
 | `POST` | `/api/business-units` | Owner | Create a new BU and provision a chat workspace |
 | `GET` | `/api/staff` | Owner, Admin | List all staff (persons + profiles) in the company |
+| `GET` | `/api/staff/persons` | Owner | List person options for enrollment |
 | `POST` | `/api/staff` | Owner | Create a person and their BU staff profile |
+| `POST` | `/api/staff/enroll` | Owner | Enroll existing person in another BU |
 | `PUT` | `/api/staff/{personId}/role` | Owner | Update a staff member's role |
 | `GET` | `/api/chat/workspace/{buId}` | Any authenticated | Get chat workspace info and member list |
 | `PUT` | `/api/chat/workspace/{buId}/members/{personId}/access` | Owner | Grant or revoke chat access for a member |
+| `GET` | `/api/chat/workspace/{buId}/messages` | Access required | Get message history (paginated) |
+| `POST` | `/api/chat/workspace/{buId}/messages` | Access required | Send a chat message |
+| `GET` | `/api/chat/workspace/{buId}/ws` | Authorized | WebSocket endpoint for real-time chat |
 
-### Go Chat Service
+### Go Chat Service (gRPC)
 
-The chat service is internal and not directly exposed to the browser. All calls originate from the .NET backend and are authenticated with a shared `X-Internal-Key` header.
+The chat service is internal and not directly exposed to the browser. Workspace and member management calls originate from the .NET backend via gRPC with `x-internal-key` authentication. Real-time messaging uses WebSocket (port 8080) with JWT authentication.
 
-Base path: `/api`
+**gRPC Service Definition** (`proto/chat.proto`):
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/workspaces` | Create a new chat workspace |
-| `GET` | `/api/workspaces/bu/:buId` | Get a workspace by its associated BU ID |
-| `GET` | `/api/workspaces/:id/members` | List all members of a workspace |
-| `POST` | `/api/workspaces/:id/members` | Add a member to a workspace |
-| `PUT` | `/api/workspaces/:id/members/:personId` | Update a member's role or access flag |
+| RPC | Description |
+|---|---|
+| `CreateWorkspace` | Create a new chat workspace for a BU |
+| `GetWorkspace` | Get workspace by ID |
+| `GetWorkspaceByBuId` | Get workspace by Business Unit ID |
+| `AddMember` | Add a member to a workspace |
+| `UpdateMemberAccess` | Toggle member's chat access |
+| `ListMembers` | List all members of a workspace |
+| `SendMessage` | Send a message (validates access) |
+| `ListMessages` | List messages with cursor pagination |
+| `StreamMessages` | Server-side streaming of new messages |
 
 ---
 
@@ -282,9 +343,12 @@ Base path: `/api`
 | Decision | Choice | Rationale |
 |---|---|---|
 | Multi-tenancy model | Shared schema + `company_id` discriminator | Simpler operations and deployment for MVP; avoids schema-per-tenant complexity |
-| Inter-service communication | Synchronous REST (HTTP) | No message broker infrastructure required; acceptable latency for MVP onboarding flows |
+| Inter-service communication | gRPC (protobuf) | Type-safe contracts, efficient binary serialization, server-side streaming for real-time messages |
+| Real-time messaging | WebSocket + Redis pub/sub | Low-latency bidirectional communication; Redis enables horizontal scaling of chat service instances |
 | Chat DB isolation | Separate PostgreSQL instance (`aura_chat`) | Enforces a clean service boundary; chat service owns its own data and schema migrations |
-| Onboarding transaction boundary | DB transaction for steps 1-5; Go calls after commit | Ensures core tenant data is consistent; Go failures return 500 but do not corrupt main DB state |
-| JWT storage (frontend) | `localStorage` | Simple implementation for assessment context; XSS risk is acknowledged and noted |
-| Default password | `P@ssw0rd` (env var `DEFAULT_STAFF_PASSWORD`) | Configurable per environment; not suitable for production |
+| Onboarding transaction boundary | DB transaction for steps 1-5; gRPC calls after commit | Ensures core tenant data is consistent; chat failures return 500 but do not corrupt main DB state |
+| JWT storage (frontend) | httpOnly cookies (via BFF proxy) | Mitigates XSS token theft; token never exposed to client-side JavaScript |
+| Frontend architecture | Next.js with custom server | Server-side rendering for initial page loads; custom HTTP server enables WebSocket upgrade proxying with httpOnly cookie injection |
+| State management | Zustand | Lightweight, no boilerplate; stores per domain (auth, BU, staff, chat) |
+| Default password | `P@ssw0rd` (env var `DEFAULT_STAFF_PASSWORD`) | Configurable per environment; not suitable for production. Owners set their own password during onboarding. |
 | Chat member provisioning on staff creation | Auto-add with `has_access = false` | Ensures all staff are represented in chat; Owner must make a deliberate action to grant access |
