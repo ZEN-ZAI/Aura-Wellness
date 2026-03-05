@@ -30,6 +30,75 @@ public class ChatController(IChatAccessService chatAccessService, ChatWebSocketH
         return NoContent();
     }
 
+    // ── Conversation endpoints ──────────────────────────────────────────────
+
+    [HttpGet("workspace/{buId:guid}/conversations")]
+    public async Task<IActionResult> GetConversations(Guid buId, CancellationToken ct)
+    {
+        var companyId = GetCompanyId();
+        var personId = GetPersonId();
+        var result = await chatAccessService.GetConversationsAsync(buId, personId, companyId, ct);
+        if (result is null) return NotFound();
+        return Ok(result);
+    }
+
+    [HttpPost("workspace/{buId:guid}/conversations/dm")]
+    public async Task<IActionResult> GetOrCreateDM(Guid buId, [FromBody] GetOrCreateDMRequest request, CancellationToken ct)
+    {
+        var companyId = GetCompanyId();
+        var personId = GetPersonId();
+        try
+        {
+            var result = await chatAccessService.GetOrCreateDMAsync(buId, personId, request.TargetPersonId, companyId, ct);
+            if (result is null) return NotFound();
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    [HttpGet("workspace/{buId:guid}/conversations/{conversationId:guid}/messages")]
+    public async Task<IActionResult> GetConversationMessages(Guid buId, Guid conversationId, [FromQuery] int limit = 50, [FromQuery] DateTime? before = null, CancellationToken ct = default)
+    {
+        var companyId = GetCompanyId();
+        var personId = GetPersonId();
+        try
+        {
+            var result = await chatAccessService.GetConversationMessagesAsync(buId, conversationId, personId, companyId, limit, before, ct);
+            if (result is null) return NotFound();
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    [HttpPost("workspace/{buId:guid}/conversations/{conversationId:guid}/messages")]
+    public async Task<IActionResult> SendConversationMessage(Guid buId, Guid conversationId, [FromBody] SendChatMessageRequest request, CancellationToken ct)
+    {
+        var companyId = GetCompanyId();
+        var personId = GetPersonId();
+        var firstName = User.FindFirstValue("firstName") ?? "";
+        var lastName = User.FindFirstValue("lastName") ?? "";
+        var senderName = $"{firstName} {lastName}".Trim();
+
+        try
+        {
+            var result = await chatAccessService.SendConversationMessageAsync(buId, conversationId, personId, senderName, request.Content, companyId, ct);
+            if (result is null) return NotFound();
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    // ── Legacy workspace-level messaging (kept for backward compatibility) ──
+
     [HttpGet("workspace/{buId:guid}/messages")]
     public async Task<IActionResult> GetMessages(Guid buId, [FromQuery] int limit = 50, [FromQuery] DateTime? before = null, CancellationToken ct = default)
     {
@@ -41,7 +110,7 @@ public class ChatController(IChatAccessService chatAccessService, ChatWebSocketH
             if (result is null) return NotFound();
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -69,9 +138,9 @@ public class ChatController(IChatAccessService chatAccessService, ChatWebSocketH
     }
 
     /// <summary>
-    /// WebSocket endpoint — bidirectional real-time chat.
-    /// The browser sends  { "type": "send_message", "content": "..." } frames.
-    /// The server pushes  ChatMessageServiceDto  JSON frames for every new message.
+    /// WebSocket endpoint -- bidirectional real-time chat.
+    /// The browser sends  { "type": "send_message", "conversationId": "...", "content": "..." } frames.
+    /// The server pushes  ChatMessageServiceDto JSON frames for every new message.
     /// </summary>
     [HttpGet("workspace/{buId:guid}/ws")]
     public async Task ChatWebSocket(Guid buId)

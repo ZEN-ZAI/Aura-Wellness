@@ -49,23 +49,101 @@ public class ChatAccessService(
         await chatClient.UpdateMemberAccessAsync(workspace.Id, personId, hasAccess, ct);
     }
 
-    public async Task<GetMessagesResponse?> GetMessagesAsync(Guid buId, Guid personId, Guid companyId, int limit = 50, DateTime? before = null, CancellationToken ct = default)
+    // ── Conversation-scoped methods ──────────────────────────────────────────
+
+    public async Task<ListConversationsResponse?> GetConversationsAsync(Guid buId, Guid personId, Guid companyId, CancellationToken ct = default)
     {
         var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
         if (workspace is null) return null;
 
-        // Verify caller has access
+        // Ensure the group conversation exists before listing (auto-creates on first access)
+        await chatClient.GetGroupConversationAsync(workspace.Id, ct);
+
+        var conversations = await chatClient.ListConversationsAsync(workspace.Id, personId, ct);
+        var persons = await personRepo.GetByCompanyAsync(companyId, ct);
+        var personMap = persons.ToDictionary(p => p.Id);
+
+        var convResponses = new List<ChatConversationResponse>();
+        foreach (var conv in conversations)
+        {
+            var participants = await chatClient.GetConversationParticipantsAsync(conv.Id, ct);
+            var participantResponses = participants
+                .Where(p => personMap.ContainsKey(p.PersonId))
+                .Select(p => new ChatConversationParticipantResponse(
+                    p.PersonId,
+                    personMap[p.PersonId].FirstName,
+                    personMap[p.PersonId].LastName))
+                .ToList();
+
+            convResponses.Add(new ChatConversationResponse(
+                conv.Id, conv.Type, conv.WorkspaceId, participantResponses));
+        }
+
+        return new ListConversationsResponse(convResponses);
+    }
+
+    public async Task<ChatConversationResponse?> GetOrCreateDMAsync(Guid buId, Guid personId, Guid targetPersonId, Guid companyId, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
+        var conv = await chatClient.GetOrCreateDMAsync(workspace.Id, personId, targetPersonId, ct);
+        var participants = await chatClient.GetConversationParticipantsAsync(conv.Id, ct);
+        var persons = await personRepo.GetByCompanyAsync(companyId, ct);
+        var personMap = persons.ToDictionary(p => p.Id);
+
+        var participantResponses = participants
+            .Where(p => personMap.ContainsKey(p.PersonId))
+            .Select(p => new ChatConversationParticipantResponse(
+                p.PersonId,
+                personMap[p.PersonId].FirstName,
+                personMap[p.PersonId].LastName))
+            .ToList();
+
+        return new ChatConversationResponse(conv.Id, conv.Type, conv.WorkspaceId, participantResponses);
+    }
+
+    public async Task<GetMessagesResponse?> GetConversationMessagesAsync(Guid buId, Guid conversationId, Guid personId, Guid companyId, int limit = 50, DateTime? before = null, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
         var members = await chatClient.GetWorkspaceMembersAsync(workspace.Id, ct);
         var member = members.FirstOrDefault(m => m.PersonId == personId);
         if (member is null || !member.HasAccess)
             throw new UnauthorizedAccessException("You do not have chat access for this workspace.");
 
-        var serviceMessages = await chatClient.GetMessagesAsync(workspace.Id, limit, before, ct);
+        var serviceMessages = await chatClient.GetMessagesAsync(conversationId, limit, before, ct);
         var messages = serviceMessages
-            .Select(m => new ChatMessageDto(m.Id, m.PersonId, m.SenderName, m.Content, m.CreatedAt))
+            .Select(m => new ChatMessageDto(m.Id, m.ConversationId, m.PersonId, m.SenderName, m.Content, m.CreatedAt))
             .ToList();
 
         return new GetMessagesResponse(messages);
+    }
+
+    public async Task<ChatMessageDto?> SendConversationMessageAsync(Guid buId, Guid conversationId, Guid personId, string senderName, string content, Guid companyId, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
+        var members = await chatClient.GetWorkspaceMembersAsync(workspace.Id, ct);
+        var member = members.FirstOrDefault(m => m.PersonId == personId);
+        if (member is null || !member.HasAccess)
+            throw new UnauthorizedAccessException("You do not have chat access for this workspace.");
+
+        var result = await chatClient.SendMessageAsync(workspace.Id, conversationId, personId, senderName, content, ct);
+        return new ChatMessageDto(result.Id, result.ConversationId, result.PersonId, result.SenderName, result.Content, result.CreatedAt);
+    }
+
+    // ── Legacy workspace-level methods (delegate to group conversation) ──────
+
+    public async Task<GetMessagesResponse?> GetMessagesAsync(Guid buId, Guid personId, Guid companyId, int limit = 50, DateTime? before = null, CancellationToken ct = default)
+    {
+        var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
+        if (workspace is null) return null;
+
+        var groupConv = await chatClient.GetGroupConversationAsync(workspace.Id, ct);
+        return await GetConversationMessagesAsync(buId, groupConv.Id, personId, companyId, limit, before, ct);
     }
 
     public async Task<ChatMessageDto?> SendMessageAsync(Guid buId, Guid personId, string senderName, string content, Guid companyId, CancellationToken ct = default)
@@ -73,13 +151,7 @@ public class ChatAccessService(
         var workspace = await chatClient.GetWorkspaceByBuIdAsync(buId, ct);
         if (workspace is null) return null;
 
-        // Verify caller has access (chat service also enforces this, but we check early)
-        var members = await chatClient.GetWorkspaceMembersAsync(workspace.Id, ct);
-        var member = members.FirstOrDefault(m => m.PersonId == personId);
-        if (member is null || !member.HasAccess)
-            throw new UnauthorizedAccessException("You do not have chat access for this workspace.");
-
-        var result = await chatClient.SendMessageAsync(workspace.Id, personId, senderName, content, ct);
-        return new ChatMessageDto(result.Id, result.PersonId, result.SenderName, result.Content, result.CreatedAt);
+        var groupConv = await chatClient.GetGroupConversationAsync(workspace.Id, ct);
+        return await SendConversationMessageAsync(buId, groupConv.Id, personId, senderName, content, companyId, ct);
     }
 }

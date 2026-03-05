@@ -27,12 +27,26 @@ message WorkspaceMember {
 }
 
 message ChatMessage {
+  string id              = 1;
+  string workspace_id    = 2;
+  string person_id       = 3;
+  string sender_name     = 4;
+  string content         = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string conversation_id = 7;
+}
+
+message Conversation {
   string id           = 1;
   string workspace_id = 2;
-  string person_id    = 3;
-  string sender_name  = 4;
-  string content      = 5;
-  google.protobuf.Timestamp created_at = 6;
+  string type         = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message ConversationParticipant {
+  string id              = 1;
+  string conversation_id = 2;
+  string person_id       = 3;
 }
 
 // ─── Workspace RPC request/response ──────────────────────────────────────────
@@ -64,21 +78,55 @@ message ListMembersResponse { repeated WorkspaceMember members = 1; }
 // ─── Message RPC request/response ────────────────────────────────────────────
 
 message SendMessageRequest {
-  string workspace_id = 1;
-  string person_id    = 2;
-  string sender_name  = 3;
-  string content      = 4;
+  string workspace_id    = 1;
+  string person_id       = 2;
+  string sender_name     = 3;
+  string content         = 4;
+  string conversation_id = 5;
 }
 
 message ListMessagesRequest {
-  string workspace_id = 1;
-  int32  limit        = 2;
+  string workspace_id    = 1;
+  int32  limit           = 2;
   google.protobuf.Timestamp before = 3;
+  string conversation_id = 4;
 }
 
 message ListMessagesResponse { repeated ChatMessage messages = 1; }
 
-message StreamMessagesRequest { string workspace_id = 1; }
+message StreamMessagesRequest {
+  string workspace_id    = 1;
+  string conversation_id = 2;
+}
+
+// ─── Conversation RPC request/response ──────────────────────────────────────
+
+message GetOrCreateDMRequest {
+  string workspace_id = 1;
+  string person_a_id  = 2;
+  string person_b_id  = 3;
+}
+
+message GetGroupConversationRequest {
+  string workspace_id = 1;
+}
+
+message ListConversationsRequest {
+  string workspace_id = 1;
+  string person_id    = 2;
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+}
+
+message GetConversationParticipantsRequest {
+  string conversation_id = 1;
+}
+
+message GetConversationParticipantsResponse {
+  repeated ConversationParticipant participants = 1;
+}
 
 // ─── Service definition ───────────────────────────────────────────────────────
 
@@ -97,4 +145,10 @@ service ChatService {
 
   // Server-side streaming — caller receives new messages in real time via Redis Pub/Sub
   rpc StreamMessages (StreamMessagesRequest) returns (stream ChatMessage);
+
+  // Conversation management
+  rpc GetOrCreateDM                (GetOrCreateDMRequest)                returns (Conversation);
+  rpc GetGroupConversation         (GetGroupConversationRequest)         returns (Conversation);
+  rpc ListConversations            (ListConversationsRequest)            returns (ListConversationsResponse);
+  rpc GetConversationParticipants  (GetConversationParticipantsRequest)  returns (GetConversationParticipantsResponse);
 }

@@ -9,9 +9,9 @@ namespace AuraWellness.API.Middleware;
 
 /// <summary>
 /// Handles a single bidirectional WebSocket session for a chat workspace.
-/// - Read loop : receives { "type": "send_message", "content": "..." } from the browser
-///               and forwards them to the chat service via REST/gRPC.
-/// - Write loop: consumes the gRPC StreamMessages server-streaming RPC and pushes
+/// - Read loop : receives { "type": "send_message", "conversationId": "...", "content": "..." }
+///               from the browser and forwards them to the chat service via gRPC.
+/// - Write loop: consumes gRPC StreamMessages for each conversation and pushes
 ///               each new message to the browser as a JSON text frame.
 /// Both loops run concurrently; when either exits the other is cancelled.
 /// </summary>
@@ -45,17 +45,24 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
             return;
         }
 
+        // Fetch conversations for write loops
+        var conversations = await chatClient.ListConversationsAsync(workspace.WorkspaceId, personId);
+
         // Linked CTS so that when either loop finishes it cancels the other.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         // Serialise WebSocket sends so ReadLoop and WriteLoop never overlap.
         using var sendLock = new SemaphoreSlim(1, 1);
 
-        // ReadLoop ends only when the browser closes the socket → drives session lifetime.
-        // WriteLoop may die on transient gRPC errors without killing the session.
-        var readTask  = ReadLoopAsync(ws, buId, workspace.WorkspaceId, personId, senderName, companyId, sendLock, cts.Token);
-        var writeTask = WriteLoopAsync(ws, workspace.WorkspaceId, sendLock, cts.Token);
+        // ReadLoop ends only when the browser closes the socket -> drives session lifetime.
+        var readTask = ReadLoopAsync(ws, buId, workspace.WorkspaceId, personId, senderName, companyId, sendLock, cts.Token);
 
-        await Task.WhenAny(readTask, writeTask);
+        // Start a write loop for each conversation
+        var writeTasks = conversations.Select(conv =>
+            WriteLoopAsync(ws, conv.Id, sendLock, cts.Token)).ToList();
+
+        var allWriteTasks = Task.WhenAll(writeTasks);
+
+        await Task.WhenAny(readTask, allWriteTasks);
         await cts.CancelAsync();
 
         if (ws.State == WebSocketState.Open || ws.State == WebSocketState.CloseReceived)
@@ -67,7 +74,7 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
             }
             catch
             {
-                // Best-effort close — ignore if the socket is already torn down.
+                // Best-effort close -- ignore if the socket is already torn down.
             }
         }
     }
@@ -106,23 +113,24 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
                 var incoming = JsonSerializer.Deserialize<WsIncomingMessage>(text,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (incoming?.Type == "send_message" && !string.IsNullOrWhiteSpace(incoming.Content))
+                if (incoming?.Type == "send_message"
+                    && !string.IsNullOrWhiteSpace(incoming.Content)
+                    && !string.IsNullOrWhiteSpace(incoming.ConversationId)
+                    && Guid.TryParse(incoming.ConversationId, out var conversationId))
                 {
-                    var saved = await chatAccessService.SendMessageAsync(buId, personId, senderName,
-                        incoming.Content, companyId, ct);
+                    var saved = await chatAccessService.SendConversationMessageAsync(
+                        buId, conversationId, personId, senderName, incoming.Content, companyId, ct);
 
-                    // Echo the saved message back to the sender immediately.
-                    // This is the shape the browser expects ("id", not "messageId").
-                    // WriteLoop will also broadcast it via pub/sub; the frontend deduplicates by id.
                     if (saved is not null)
                     {
                         var echo = new
                         {
-                            Id         = saved.MessageId,
-                            PersonId   = saved.PersonId,
-                            SenderName = saved.SenderName,
-                            Content    = saved.Content,
-                            CreatedAt  = saved.CreatedAt,
+                            Id             = saved.MessageId,
+                            ConversationId = saved.ConversationId,
+                            PersonId       = saved.PersonId,
+                            SenderName     = saved.SenderName,
+                            Content        = saved.Content,
+                            CreatedAt      = saved.CreatedAt,
                         };
                         await SendJsonAsync(ws, echo, sendLock, ct);
                     }
@@ -136,14 +144,13 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
         }
     }
 
-    /// <summary>Pulls messages from the gRPC streaming RPC and pushes them to the browser.
-    /// gRPC errors are caught so they never kill the whole WebSocket session — the sender's
-    /// own messages are still echoed immediately by ReadLoop.</summary>
-    private async Task WriteLoopAsync(WebSocket ws, Guid workspaceId, SemaphoreSlim sendLock, CancellationToken ct)
+    /// <summary>Pulls messages from the gRPC streaming RPC for a single conversation
+    /// and pushes them to the browser.</summary>
+    private async Task WriteLoopAsync(WebSocket ws, Guid conversationId, SemaphoreSlim sendLock, CancellationToken ct)
     {
         try
         {
-            await foreach (var msg in chatClient.StreamMessagesAsync(workspaceId, ct))
+            await foreach (var msg in chatClient.StreamMessagesAsync(conversationId, ct))
             {
                 if (ws.State != WebSocketState.Open) break;
                 await SendJsonAsync(ws, msg, sendLock, ct);
@@ -153,7 +160,6 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
         catch
         {
             // Swallow gRPC / network errors so the WebSocket session stays alive.
-            // The sender still sees their own messages via the ReadLoop echo.
         }
     }
 
@@ -179,5 +185,5 @@ public class ChatWebSocketHandler(IChatAccessService chatAccessService, IChatSer
 
     // ---------------- inner DTO ----------------
 
-    private sealed record WsIncomingMessage(string? Type, string? Content);
+    private sealed record WsIncomingMessage(string? Type, string? ConversationId, string? Content);
 }
