@@ -52,6 +52,7 @@ services:
       DB_USER: chat_user
       DB_PASSWORD: ${POSTGRES_CHAT_PASSWORD}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
       PORT: "50051"
       REDIS_ADDR: "redis:6379"
     depends_on:
@@ -68,6 +69,8 @@ services:
       dockerfile: Dockerfile
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgres-main;Port=5432;Database=aura_wellness;Username=aura_user;Password=${POSTGRES_MAIN_PASSWORD}"
+      ConnectionStrings__ChatConnection: "Host=postgres-chat;Port=5432;Database=aura_chat;Username=chat_user;Password=${POSTGRES_CHAT_PASSWORD}"
+      ConnectionStrings__Redis: "redis:6379,allowAdmin=true"
       Jwt__Secret: ${JWT_SECRET}
       Jwt__ExpiryMinutes: "60"
       Jwt__Issuer: "aura-wellness"
@@ -93,12 +96,14 @@ services:
       dockerfile: Dockerfile
     environment:
       BACKEND_URL: http://backend:8080
+      CHAT_SERVICE_URL: http://chat-service:8080
       DEFAULT_STAFF_PASSWORD: ${DEFAULT_STAFF_PASSWORD}
       NODE_ENV: production
     ports:
       - "3000:3000"
     depends_on:
       - backend
+      - chat-service
 
 volumes:
   postgres_main_data:
