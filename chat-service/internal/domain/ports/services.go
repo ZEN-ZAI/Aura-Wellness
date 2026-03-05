@@ -18,7 +18,15 @@ type WorkspaceService interface {
 }
 
 type MessagingService interface {
-	SendMessage(ctx context.Context, workspaceID, personID uuid.UUID, senderName, content string) (entities.ChatMessage, error)
-	ListMessages(ctx context.Context, workspaceID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error)
-	StreamMessages(ctx context.Context, workspaceID uuid.UUID) (<-chan entities.ChatMessage, func(), error)
+	SendMessage(ctx context.Context, workspaceID, conversationID, personID uuid.UUID, senderName, content string) (entities.ChatMessage, error)
+	ListMessages(ctx context.Context, conversationID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error)
+	StreamMessages(ctx context.Context, conversationID uuid.UUID) (<-chan entities.ChatMessage, func(), error)
+}
+
+type ConversationService interface {
+	GetOrCreateGroupConversation(ctx context.Context, workspaceID uuid.UUID) (entities.ChatConversation, error)
+	GetOrCreateDMConversation(ctx context.Context, workspaceID, personA, personB uuid.UUID) (entities.ChatConversation, error)
+	ListConversations(ctx context.Context, workspaceID, personID uuid.UUID) ([]entities.ChatConversation, error)
+	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]entities.ChatConversationParticipant, error)
+	GetByID(ctx context.Context, id uuid.UUID) (entities.ChatConversation, error)
 }

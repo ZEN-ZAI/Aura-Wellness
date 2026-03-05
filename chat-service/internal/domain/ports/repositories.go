@@ -23,5 +23,15 @@ type MemberRepository interface {
 
 type MessageRepository interface {
 	Save(ctx context.Context, m entities.ChatMessage) (entities.ChatMessage, error)
-	List(ctx context.Context, workspaceID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error)
+	List(ctx context.Context, conversationID uuid.UUID, before time.Time, limit int) ([]entities.ChatMessage, error)
+}
+
+type ConversationRepository interface {
+	Create(ctx context.Context, c entities.ChatConversation) (entities.ChatConversation, error)
+	GetByID(ctx context.Context, id uuid.UUID) (entities.ChatConversation, error)
+	GetGroupByWorkspace(ctx context.Context, workspaceID uuid.UUID) (entities.ChatConversation, error)
+	GetDMByParticipants(ctx context.Context, workspaceID, personA, personB uuid.UUID) (entities.ChatConversation, error)
+	ListByWorkspaceAndPerson(ctx context.Context, workspaceID, personID uuid.UUID) ([]entities.ChatConversation, error)
+	AddParticipant(ctx context.Context, p entities.ChatConversationParticipant) error
+	ListParticipants(ctx context.Context, conversationID uuid.UUID) ([]entities.ChatConversationParticipant, error)
 }
